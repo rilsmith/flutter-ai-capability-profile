@@ -18,7 +18,7 @@ class ProfileInsightsCard extends StatelessWidget {
           Text('Profile Insights', style: DashboardTheme.cardHeading),
           const SizedBox(height: 8),
           const Text(
-            'Patterns from combining capability strength and application breadth — descriptive, not a maturity score.',
+            'Patterns from combining capability strength and application breadth — descriptive, not a score on a linear path.',
             style: TextStyle(
               fontSize: 13,
               color: DashboardTheme.muted,

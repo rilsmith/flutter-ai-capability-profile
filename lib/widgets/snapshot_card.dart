@@ -66,7 +66,7 @@ class SnapshotCard extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           const Text(
-            'Maturity Distribution',
+            'Capability Distribution',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,

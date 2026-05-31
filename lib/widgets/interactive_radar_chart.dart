@@ -6,11 +6,11 @@ import '../models/dimension.dart';
 import '../theme/dashboard_theme.dart';
 import '../utils/compute.dart';
 
-const _viewBox = 720.0;
-const _cx = 360.0;
-const _cy = 360.0;
-const _maxRadius = 172.0;
-const _labelOffset = 56.0;
+const _viewBox = 840.0;
+const _cx = 420.0;
+const _cy = 420.0;
+const _maxRadius = 160.0;
+const _labelOffset = 52.0;
 const _axisHitWidth = 24.0;
 const _dotHitRadius = 18.0;
 
@@ -293,13 +293,13 @@ class _DimensionLabel extends StatelessWidget {
     }
 
     final titleStyle = TextStyle(
-      fontSize: 16,
+      fontSize: 18,
       height: 1.15,
       fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
       color: color,
     );
     final descStyle = TextStyle(
-      fontSize: 13.5,
+      fontSize: 15,
       height: 1.15,
       color: DashboardTheme.muted.withValues(
         alpha: isSelected ? 1 : (canSelect ? 0.92 : 1),

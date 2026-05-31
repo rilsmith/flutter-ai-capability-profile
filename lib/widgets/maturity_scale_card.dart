@@ -16,7 +16,7 @@ class MaturityScaleCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Maturity Scale (1–5)', style: DashboardTheme.cardHeading),
+          Text('Capability Scale (1–5)', style: DashboardTheme.cardHeading),
           const SizedBox(height: 16),
           for (final level in levels)
             Padding(

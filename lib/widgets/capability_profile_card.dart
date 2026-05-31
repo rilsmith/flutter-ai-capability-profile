@@ -143,7 +143,7 @@ class _ProfileSidebar extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         const Text(
-          'Maturity Distribution',
+          'Capability Distribution',
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
@@ -189,7 +189,7 @@ class _ProfileSidebar extends StatelessWidget {
         const Divider(color: DashboardTheme.cardBorder, height: 1),
         const SizedBox(height: 16),
         const Text(
-          'Maturity Scale (1–5)',
+          'Capability Scale (1–5)',
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,

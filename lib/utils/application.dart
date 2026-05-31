@@ -91,12 +91,18 @@ List<String> computeProfileInsights(
   }
 
   final divergent = inScope.where(domainHasInvolvementLinkDivergence).toList();
-  if (divergent.length >= 3 &&
+  if (divergent.isNotEmpty &&
       useWithoutLinks.isEmpty &&
       linksWithoutUse.isEmpty) {
-    insights.add(
-      '${divergent.length} domains show different involvement and capability-link patterns — review strip and matrix together for nuance.',
-    );
+    if (divergent.length >= 3) {
+      insights.add(
+        '${divergent.length} domains (including ${divergent.first.shortName}) show different involvement and capability-link patterns — review strip and matrix together for nuance.',
+      );
+    } else {
+      insights.add(
+        '${divergent.first.shortName} shows a mismatch between agent involvement and capability links — check the matrix to see which capabilities anchor this domain.',
+      );
+    }
   }
 
   if (highCaps.isNotEmpty && active.isNotEmpty) {
@@ -120,8 +126,10 @@ List<String> computeProfileInsights(
     return active.every((d) => !d.capabilityIds.contains(cap.id));
   }).toList();
   if (latent.isNotEmpty) {
+    final names = latent.take(2).map((d) => d.name).join(', ');
+    final suffix = latent.length > 2 ? ', and others' : '';
     insights.add(
-      '${latent.first.name} is rated highly but not linked to any active domain yet.',
+      '$names$suffix: rated highly but not linked to any active domain yet — potential latent strength.',
     );
   }
 
@@ -162,7 +170,7 @@ List<String> computeProfileInsights(
     }
   }
 
-  return insights.take(4).toList();
+  return insights.take(6).toList();
 }
 
 String involvementLabel(DomainInvolvement involvement) {
