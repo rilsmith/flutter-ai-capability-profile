@@ -211,12 +211,12 @@ class _SymbolScoreCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isDominant ? accent.withValues(alpha: 0.06) : Colors.white,
-        borderRadius: BorderRadius.circular(10),
+        color: isDominant ? accent.withOpacity(0.06) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isDominant ? accent.withValues(alpha: 0.35) : DashboardTheme.cardBorder,
-          width: isDominant ? 1.5 : 1,
+          color: isDominant ? accent.withOpacity(0.35) : DashboardTheme.cardBorder,
         ),
+
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

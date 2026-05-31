@@ -49,75 +49,13 @@ class DashboardScreen extends StatelessWidget {
     );
     final width = MediaQuery.sizeOf(context).width;
 
-    return Container(
-      padding: EdgeInsets.fromLTRB(
-        width <= 700 ? 20 : 40,
-        36,
-        width <= 700 ? 20 : 40,
-        32,
-      ),
-      decoration: DashboardTheme.dashboardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Header(
-            title: data.title,
-            subtitle: data.subtitle,
-            editing: editing,
-            onToggleEdit: onToggleEdit,
-            onExport: notifier.exportJson,
-          ),
-          const SizedBox(height: 28),
-          _MainGrid(
-            editing: editing,
-            selectedDimensionId: selectedDimensionId,
-            selectedDomainId: selectedDomainId,
-            onSelectDimension: onSelectDimension,
-            onSelectDomain: onSelectDomain,
-            average: average,
-            distribution: distribution,
-            insights: insights,
-          ),
-        ],
-      ),
-    );
-  }
-}
+    void handleSelectDimension(int id) {
+      onSelectDimension(selectedDimensionId == id ? null : id);
+    }
 
-class _MainGrid extends StatelessWidget {
-  const _MainGrid({
-    required this.editing,
-    required this.selectedDimensionId,
-    required this.selectedDomainId,
-    required this.onSelectDimension,
-    required this.onSelectDomain,
-    required this.average,
-    required this.distribution,
-    required this.insights,
-  });
-
-  final bool editing;
-  final int? selectedDimensionId;
-  final int? selectedDomainId;
-  final ValueChanged<int?> onSelectDimension;
-  final ValueChanged<int?> onSelectDomain;
-  final double average;
-  final Distribution distribution;
-  final List<String> insights;
-
-  void _handleSelectDimension(int id) {
-    onSelectDimension(selectedDimensionId == id ? null : id);
-  }
-
-  void _handleSelectDomain(int id) {
-    onSelectDomain(selectedDomainId == id ? null : id);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final notifier = context.watch<DashboardNotifier>();
-    final data = notifier.data;
-    final width = MediaQuery.sizeOf(context).width;
+    void handleSelectDomain(int id) {
+      onSelectDomain(selectedDomainId == id ? null : id);
+    }
 
     final capabilityProfile = CapabilityProfileCard(
       dimensions: data.dimensions,
@@ -127,7 +65,7 @@ class _MainGrid extends StatelessWidget {
       tiers: data.tiers,
       maturityScale: data.maturityScale,
       selectedDimensionId: selectedDimensionId,
-      onSelectDimension: _handleSelectDimension,
+      onSelectDimension: handleSelectDimension,
     );
     final styleLens = computeStyleLens(
       data.dimensions,
@@ -141,7 +79,7 @@ class _MainGrid extends StatelessWidget {
         maxScore: data.maxScore,
         editing: editing,
         selectedDimensionId: selectedDimensionId,
-        onSelectDimension: _handleSelectDimension,
+        onSelectDimension: handleSelectDimension,
         onUpdateScore: (id, score) =>
             notifier.patchDimension(id, score: score),
       ),
@@ -154,7 +92,7 @@ class _MainGrid extends StatelessWidget {
     final applicationCoverage = ApplicationCoverageCard(
       domains: data.applicationDomains,
       selectedDomainId: selectedDomainId,
-      onSelectDomain: _handleSelectDomain,
+      onSelectDomain: handleSelectDomain,
       onCycleInvolvement: notifier.cycleDomainInvolvement,
     );
     final applicationCoverageHowToRead = HowToReadCard(
@@ -172,8 +110,8 @@ class _MainGrid extends StatelessWidget {
       domains: data.applicationDomains,
       selectedDimensionId: selectedDimensionId,
       selectedDomainId: selectedDomainId,
-      onSelectDimension: _handleSelectDimension,
-      onSelectDomain: _handleSelectDomain,
+      onSelectDimension: handleSelectDimension,
+      onSelectDomain: handleSelectDomain,
       onToggleCapabilityLink: notifier.toggleDomainCapability,
     );
     final profileInsights = ProfileInsightsCard(insights: insights);
@@ -202,27 +140,46 @@ class _MainGrid extends StatelessWidget {
             ],
           );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        intro,
-        if (data.intro.trim().isNotEmpty) const SizedBox(height: 20),
-        capabilityHowToRead,
-        const SizedBox(height: 20),
-        chartSection,
-        const SizedBox(height: 20),
-        capabilityProfile,
-        const SizedBox(height: 20),
-        applicationCoverageHowToRead,
-        const SizedBox(height: 20),
-        applicationCoverage,
-        const SizedBox(height: 20),
-        applicationMatrixHowToRead,
-        const SizedBox(height: 20),
-        matrix,
-        const SizedBox(height: 20),
-        profileInsights,
-      ],
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        width <= 700 ? 20 : 40,
+        36,
+        width <= 700 ? 20 : 40,
+        32,
+      ),
+      decoration: DashboardTheme.dashboardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Header(
+            title: data.title,
+            subtitle: data.subtitle,
+            editing: editing,
+            onToggleEdit: onToggleEdit,
+            onExport: notifier.exportJson,
+          ),
+          const SizedBox(height: 28),
+          intro,
+          if (data.intro.trim().isNotEmpty) ...[
+            const SizedBox(height: 20),
+          ],
+          capabilityHowToRead,
+          const SizedBox(height: 20),
+          chartSection,
+          const SizedBox(height: 20),
+          capabilityProfile,
+          const SizedBox(height: 20),
+          applicationCoverageHowToRead,
+          const SizedBox(height: 20),
+          applicationCoverage,
+          const SizedBox(height: 20),
+          applicationMatrixHowToRead,
+          const SizedBox(height: 20),
+          matrix,
+          const SizedBox(height: 20),
+          profileInsights,
+        ],
+      ),
     );
   }
 }

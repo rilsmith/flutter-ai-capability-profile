@@ -22,11 +22,11 @@ class DashboardTheme {
       color: backgroundColor ?? Colors.white,
       border: Border.all(color: cardBorder),
       borderRadius: BorderRadius.circular(12),
-      boxShadow: const [
+      boxShadow: [
         BoxShadow(
-          color: cardShadow,
+          color: Colors.black.withOpacity(0.06),
           blurRadius: 3,
-          offset: Offset(0, 1),
+          offset: const Offset(0, 1),
         ),
       ],
     );
@@ -37,11 +37,11 @@ class DashboardTheme {
       color: Colors.white,
       border: Border.all(color: cardBorder),
       borderRadius: BorderRadius.circular(16),
-      boxShadow: const [
+      boxShadow: [
         BoxShadow(
-          color: Color(0x0F000000),
+          color: Colors.black.withOpacity(0.06),
           blurRadius: 24,
-          offset: Offset(0, 4),
+          offset: const Offset(0, 4),
         ),
       ],
     );

@@ -15,6 +15,7 @@ import '../utils/migrate_application_domains.dart';
 
 class DashboardNotifier extends ChangeNotifier {
   DashboardNotifier() {
+    print('DashboardNotifier: Constructor started');
     _load();
   }
 
@@ -69,7 +70,10 @@ class DashboardNotifier extends ChangeNotifier {
 
   Future<void> _load() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await SharedPreferences.getInstance().timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => throw TimeoutException('SharedPreferences timeout'),
+      );
       final raw = prefs.getString(storageKey);
       if (raw != null) {
         final parsed = DashboardData.fromJson(

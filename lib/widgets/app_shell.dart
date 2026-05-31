@@ -38,59 +38,51 @@ class _AppShellState extends State<AppShell> {
     final width = MediaQuery.sizeOf(context).width;
     final stackEditPanel = width <= 1300;
 
+    final dashboard = DashboardScreen(
+      editing: _editing,
+      selectedDimensionId: _selectedDimensionId,
+      selectedDomainId: _selectedDomainId,
+      onToggleEdit: _toggleEdit,
+      onSelectDimension: _selectDimension,
+      onSelectDomain: _selectDomain,
+    );
+
+    final editPanel = EditPanel(
+      fullWidth: stackEditPanel,
+      selectedDimensionId: _selectedDimensionId,
+      selectedDomainId: _selectedDomainId,
+      onSelectDimension: (id) => _selectDimension(id),
+      onSelectDomain: (id) => _selectDomain(id),
+    );
+
+    final child = stackEditPanel
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_editing) ...[
+                editPanel,
+                const SizedBox(height: 24),
+              ],
+              dashboard,
+            ],
+          )
+        : Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_editing) ...[
+                editPanel,
+                const SizedBox(width: 24),
+              ],
+              Expanded(child: dashboard),
+            ],
+          );
+
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 1600),
         child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: stackEditPanel
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (_editing) ...[
-                      EditPanel(
-                        fullWidth: true,
-                        selectedDimensionId: _selectedDimensionId,
-                        selectedDomainId: _selectedDomainId,
-                        onSelectDimension: (id) => _selectDimension(id),
-                        onSelectDomain: (id) => _selectDomain(id),
-                      ),
-                      const SizedBox(height: 24),
-                    ],
-                    DashboardScreen(
-                      editing: _editing,
-                      selectedDimensionId: _selectedDimensionId,
-                      selectedDomainId: _selectedDomainId,
-                      onToggleEdit: _toggleEdit,
-                      onSelectDimension: _selectDimension,
-                      onSelectDomain: _selectDomain,
-                    ),
-                  ],
-                )
-              : Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (_editing) ...[
-                      EditPanel(
-                        selectedDimensionId: _selectedDimensionId,
-                        selectedDomainId: _selectedDomainId,
-                        onSelectDimension: (id) => _selectDimension(id),
-                        onSelectDomain: (id) => _selectDomain(id),
-                      ),
-                      const SizedBox(width: 24),
-                    ],
-                    Expanded(
-                      child: DashboardScreen(
-                        editing: _editing,
-                        selectedDimensionId: _selectedDimensionId,
-                        selectedDomainId: _selectedDomainId,
-                        onToggleEdit: _toggleEdit,
-                        onSelectDimension: _selectDimension,
-                        onSelectDomain: _selectDomain,
-                      ),
-                    ),
-                  ],
-                ),
+          padding: EdgeInsets.all(width <= 600 ? 16 : 24),
+          child: child,
         ),
       ),
     );

@@ -301,9 +301,9 @@ class _MatrixDataRow extends StatelessWidget {
           return Container(
             width: cellWidth,
             color: colSelected
-                ? DashboardTheme.primaryLight.withValues(alpha: 0.65)
+                ? DashboardTheme.primaryLight.withOpacity(0.65)
                 : rowSelected
-                    ? DashboardTheme.primaryLight.withValues(alpha: 0.35)
+                    ? DashboardTheme.primaryLight.withOpacity(0.35)
                     : null,
             child: Center(
               child: isNa

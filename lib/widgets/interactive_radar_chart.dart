@@ -301,8 +301,8 @@ class _DimensionLabel extends StatelessWidget {
     final descStyle = TextStyle(
       fontSize: 15,
       height: 1.15,
-      color: DashboardTheme.muted.withValues(
-        alpha: isSelected ? 1 : (canSelect ? 0.92 : 1),
+      color: DashboardTheme.muted.withOpacity(
+        isSelected ? 1 : (canSelect ? 0.92 : 1),
       ),
     );
 
@@ -444,7 +444,7 @@ class _RadarVisualPainter extends CustomPainter {
           offset,
           9,
           Paint()
-            ..color = color.withValues(alpha: 0.45)
+            ..color = color.withOpacity(0.45)
             ..style = PaintingStyle.stroke
             ..strokeWidth = 2,
         );

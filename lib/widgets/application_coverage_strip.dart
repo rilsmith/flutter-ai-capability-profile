@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../models/application_domain.dart';
 import '../theme/dashboard_theme.dart';
 import '../utils/application.dart';
 import '../utils/application_sync.dart';
+import 'dart:math' as math;
 
 class ApplicationCoverageStrip extends StatelessWidget {
   const ApplicationCoverageStrip({
@@ -37,9 +39,13 @@ class ApplicationCoverageStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        // Guard against zero or very small widths during initial layout
+        if (constraints.maxWidth <= _gap * 2) {
+          return const SizedBox.shrink();
+        }
+
         final columns = constraints.maxWidth <= 700 ? 3 : 9;
-        final itemWidth =
-            (constraints.maxWidth - (columns - 1) * _gap) / columns;
+        final itemWidth = math.max(0.0, (constraints.maxWidth - (columns - 1) * _gap) / columns);
 
         return Wrap(
           spacing: _gap,
@@ -136,6 +142,7 @@ class _Segment extends StatelessWidget {
                                   color: DashboardTheme.primary,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
+                                child: const SizedBox.expand(),
                               ),
                             ),
                           ),
