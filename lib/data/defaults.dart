@@ -10,7 +10,11 @@ const defaultDashboardData = DashboardData(
   title: 'Agentic Engineering Capability Profile',
   subtitle: 'Assessment across 9 capability dimensions and 9 SDLC domains',
   intro:
-      'Many frameworks exist for evaluating maturity of agentic engineering, but they run into common maturity model pitfalls. While the concepts are useful for establishing a thought framework, these maturity models linearize AI skill progression by representing it as a sequential path of advancement when it is actually a multidimensional capability landscape.',
+      '''
+      Many frameworks exist for evaluating maturity of agentic engineering, but they run into common maturity model pitfalls. While the concepts are useful for establishing a thought framework, these maturity models linearize AI skill progression by representing it as a sequential path of advancement when it is actually a multidimensional capability landscape. These tools attempt to capture the multidimensional nature of agentic engineering by assessing capability in 9 dimensions and 9 domains of the software development lifecycle (SDLC).
+      
+      AI has not changed the core principles of effective software engineering. This is important because healthy teams consist of individuals with complementary skill sets. The most effective teams are those that have a balance of individuals with different capabilities, and that can collaborate effectively to solve problems. This is still true for agentic engineering.
+      ''',
   dimensions: [
     Dimension(
       id: 1,
@@ -201,9 +205,13 @@ const defaultDashboardData = DashboardData(
     ),
   ],
   howToRead:
-      'Higher scores (toward the outer ring) indicate stronger capability in that dimension. Focus improvement where scores are lowest relative to your goals.',
+      '''
+      Higher scores (toward the outer ring) indicate stronger capability in that dimension. Focus improvement where scores are lowest relative to your goals.
+      
+      To illustrate the importance of individuals with complementary capabilities, the capability scores are translated into a "class" just like how an effective RPG party might have a mix of characters with different abilities.
+      ''',
   applicationHowToRead:
-      'Coding (i.e. Implementation) is the most common domain for agent use, but it\'s not the only one. This helps visualize how well you use agents in each domain of the software development development lifecycle. Click a lifecycle bar to cycle agent use (Never → Occasional → Regular). Dashed border means involvement and capability links differ.',
+      'Coding (i.e. Implementation) is the most common domain for agent use, but it\'s not the only one. This helps visualize how well you use agents in each domain of the software development development lifecycle. Click a lifecycle bar to cycle agent use (Never → Occasional → Regular).',
   applicationMatrixHowToRead:
       'This matrix helps break down each capability across each domain. Click a cell to link or unlink a capability in that domain. Involvement (lifecycle strip) and capability links are independent — both contribute to your profile. Colored cells show where a capability manifests; empty cells are not linked. N/A domains are read-only (set in Edit panel).',
   tiers: TierGroup(

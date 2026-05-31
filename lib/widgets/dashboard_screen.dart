@@ -4,8 +4,10 @@ import 'package:provider/provider.dart';
 import '../models/distribution.dart';
 import '../providers/dashboard_notifier.dart';
 import '../theme/dashboard_theme.dart';
+import '../data/style_lens_config.dart';
 import '../utils/application.dart';
 import '../utils/compute.dart';
+import '../utils/style_lens.dart';
 import 'capability_profile_card.dart';
 import 'application_coverage_card.dart';
 import 'capability_application_matrix.dart';
@@ -14,6 +16,7 @@ import 'header.dart';
 import 'how_to_read_card.dart';
 import 'interactive_radar_chart.dart';
 import 'profile_insights_card.dart';
+import 'style_lens_panel.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({
@@ -126,6 +129,12 @@ class _MainGrid extends StatelessWidget {
       selectedDimensionId: selectedDimensionId,
       onSelectDimension: _handleSelectDimension,
     );
+    final styleLens = computeStyleLens(
+      data.dimensions,
+      tiers: data.tiers,
+      maxScore: data.maxScore,
+      selectedDimensionId: selectedDimensionId,
+    );
     final chart = Center(
       child: InteractiveRadarChart(
         dimensions: data.dimensions,
@@ -137,16 +146,19 @@ class _MainGrid extends StatelessWidget {
             notifier.patchDimension(id, score: score),
       ),
     );
+    final styleLensPanel = StyleLensPanel(
+      analysis: styleLens,
+      config: styleLensConfig,
+      maxScore: data.maxScore,
+    );
     final applicationCoverage = ApplicationCoverageCard(
       domains: data.applicationDomains,
-      dimensions: data.dimensions,
-      tiers: data.tiers,
       selectedDomainId: selectedDomainId,
       onSelectDomain: _handleSelectDomain,
       onCycleInvolvement: notifier.cycleDomainInvolvement,
     );
     final applicationCoverageHowToRead = HowToReadCard(
-      title: 'How to Read — Application Coverage',
+      title: 'How to Read — SDLC Coverage',
       text: data.applicationHowToRead,
     );
     final applicationMatrixHowToRead = HowToReadCard(
@@ -167,6 +179,28 @@ class _MainGrid extends StatelessWidget {
     final profileInsights = ProfileInsightsCard(insights: insights);
 
     final chartHeight = width <= 700 ? 420.0 : width <= 1100 ? 480.0 : 520.0;
+    final sideBySide = width > 960;
+
+    final chartSection = sideBySide
+        ? SizedBox(
+            height: chartHeight,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(flex: 3, child: chart),
+                const SizedBox(width: 24),
+                Expanded(flex: 2, child: SingleChildScrollView(child: styleLensPanel)),
+              ],
+            ),
+          )
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(height: chartHeight, child: chart),
+              const SizedBox(height: 20),
+              styleLensPanel,
+            ],
+          );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -175,7 +209,7 @@ class _MainGrid extends StatelessWidget {
         if (data.intro.trim().isNotEmpty) const SizedBox(height: 20),
         capabilityHowToRead,
         const SizedBox(height: 20),
-        SizedBox(height: chartHeight, child: chart),
+        chartSection,
         const SizedBox(height: 20),
         capabilityProfile,
         const SizedBox(height: 20),

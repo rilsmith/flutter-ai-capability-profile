@@ -230,7 +230,7 @@ class _EditPanelState extends State<EditPanel> {
                     ),
                   ),
                   _Field(
-                    label: 'How to Read — Application Coverage',
+                    label: 'How to Read — SDLC Coverage',
                     child: TextField(
                       controller: _applicationHowToReadController,
                       onChanged: notifier.updateApplicationHowToRead,

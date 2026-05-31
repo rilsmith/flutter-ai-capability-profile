@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../models/application_domain.dart';
-import '../models/dimension.dart';
-import '../models/tier.dart';
 import '../theme/dashboard_theme.dart';
 import '../utils/application.dart';
 import 'application_coverage_strip.dart';
@@ -11,16 +9,12 @@ class ApplicationCoverageCard extends StatelessWidget {
   const ApplicationCoverageCard({
     super.key,
     required this.domains,
-    required this.dimensions,
-    required this.tiers,
     this.selectedDomainId,
     this.onSelectDomain,
     this.onCycleInvolvement,
   });
 
   final List<ApplicationDomain> domains;
-  final List<Dimension> dimensions;
-  final TierGroup tiers;
   final int? selectedDomainId;
   final ValueChanged<int>? onSelectDomain;
   final ValueChanged<int>? onCycleInvolvement;
@@ -28,7 +22,7 @@ class ApplicationCoverageCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final breadth = computeApplicationBreadth(domains);
-    final shape = profileShapeLabel(dimensions, domains, tiers);
+    final stackHeader = MediaQuery.sizeOf(context).width <= 1100;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
@@ -36,13 +30,32 @@ class ApplicationCoverageCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Application Coverage', style: DashboardTheme.cardHeading),
-              _Stats(breadth: breadth, shape: shape),
-            ],
-          ),
+          if (stackHeader)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('SDLC Coverage', style: DashboardTheme.cardHeading),
+                const SizedBox(height: 12),
+                _StatBlock(
+                  value: '${breadth.activeCount}/${breadth.inScopeCount}',
+                  label: 'domains with agent use',
+                  alignStart: true,
+                ),
+              ],
+            )
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text('SDLC Coverage', style: DashboardTheme.cardHeading),
+                ),
+                _StatBlock(
+                  value: '${breadth.activeCount}/${breadth.inScopeCount}',
+                  label: 'domains with agent use',
+                ),
+              ],
+            ),
           const SizedBox(height: 20),
           ApplicationCoverageStrip(
             domains: domains,
@@ -53,19 +66,22 @@ class ApplicationCoverageCard extends StatelessWidget {
           const SizedBox(height: 16),
           const Divider(color: DashboardTheme.divider, height: 1),
           const SizedBox(height: 14),
-          const Text(
-            'Click a bar to cycle agent use (Never → Occasional → Regular). Dashed border = involvement and capability links differ.',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: DashboardTheme.primary,
-            ),
-          ),
-          const SizedBox(height: 12),
           Wrap(
             spacing: 16,
             runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: const [
+              SizedBox(
+                width: double.infinity,
+                child: Text(
+                  'Click a bar to cycle agent use (Never → Occasional → Regular). Dashed border = involvement and capability links differ.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: DashboardTheme.primary,
+                  ),
+                ),
+              ),
               _LegendItem(color: DashboardTheme.primary, label: 'Regular'),
               _LegendItem(
                 color: DashboardTheme.primary,
@@ -89,53 +105,34 @@ class ApplicationCoverageCard extends StatelessWidget {
   }
 }
 
-class _Stats extends StatelessWidget {
-  const _Stats({required this.breadth, required this.shape});
-
-  final ApplicationBreadth breadth;
-  final String shape;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _StatBlock(
-          value: '${breadth.activeCount}/${breadth.inScopeCount}',
-          label: 'domains with agent use',
-        ),
-        const SizedBox(width: 24),
-        _StatBlock(value: shape, label: 'profile shape', compact: true),
-      ],
-    );
-  }
-}
-
 class _StatBlock extends StatelessWidget {
   const _StatBlock({
     required this.value,
     required this.label,
-    this.compact = false,
+    this.alignStart = false,
   });
 
   final String value;
   final String label;
-  final bool compact;
+  final bool alignStart;
 
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
+      crossAxisAlignment:
+          alignStart ? CrossAxisAlignment.start : CrossAxisAlignment.end,
       children: [
         Text(
           value,
-          textAlign: TextAlign.right,
-          style: TextStyle(
-            fontSize: compact ? 14 : 22,
+          textAlign: alignStart ? TextAlign.left : TextAlign.right,
+          style: const TextStyle(
+            fontSize: 22,
             fontWeight: FontWeight.w700,
-            color: compact ? DashboardTheme.body : DashboardTheme.primary,
+            color: DashboardTheme.primary,
+            height: 1.1,
           ),
         ),
+        const SizedBox(height: 2),
         Text(
           label.toUpperCase(),
           style: const TextStyle(
