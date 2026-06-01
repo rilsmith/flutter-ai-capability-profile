@@ -6,11 +6,11 @@ import '../models/dimension.dart';
 import '../theme/dashboard_theme.dart';
 import '../utils/compute.dart';
 
-const _viewBox = 840.0;
-const _cx = 420.0;
-const _cy = 420.0;
-const _maxRadius = 160.0;
-const _labelOffset = 52.0;
+const _viewBox = 1100.0;
+const _cx = 550.0;
+const _cy = 550.0;
+const _maxRadius = 240.0;
+const _labelOffset = 40.0;
 const _axisHitWidth = 24.0;
 const _dotHitRadius = 18.0;
 
@@ -265,7 +265,7 @@ class _DimensionLabel extends StatelessWidget {
     final normalized = ((angleDeg % 360) + 360) % 360;
     final descLines = wrapDescriptor(
       dimension.descriptor,
-      normalized > 30 && normalized < 150 ? 28 : 32,
+      normalized > 30 && normalized < 150 ? 22 : 26,
     );
     final pos = polarToXY(_cx, _cy, _maxRadius + _labelOffset, angleDeg);
     final color = DashboardTheme.parseHex(dimension.color);
@@ -293,16 +293,16 @@ class _DimensionLabel extends StatelessWidget {
     }
 
     final titleStyle = TextStyle(
-      fontSize: 18,
+      fontSize: 24,
       height: 1.15,
       fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
       color: color,
     );
     final descStyle = TextStyle(
-      fontSize: 15,
+      fontSize: 20,
       height: 1.15,
-      color: DashboardTheme.muted.withOpacity(
-        isSelected ? 1 : (canSelect ? 0.92 : 1),
+      color: DashboardTheme.muted.withValues(
+        alpha: isSelected ? 1 : (canSelect ? 0.92 : 1),
       ),
     );
 
@@ -388,13 +388,13 @@ class _RadarVisualPainter extends CustomPainter {
       final painter = TextPainter(
         text: TextSpan(
           text: '$level',
-          style: const TextStyle(fontSize: 10, color: DashboardTheme.subtle),
+          style: const TextStyle(fontSize: 16, color: DashboardTheme.subtle),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
       painter.paint(
         canvas,
-        Offset(pos.x - 14 - painter.width, pos.y + 4 - painter.height / 2),
+        Offset(pos.x - 20 - painter.width, pos.y + 4 - painter.height / 2),
       );
     }
 
@@ -444,7 +444,7 @@ class _RadarVisualPainter extends CustomPainter {
           offset,
           9,
           Paint()
-            ..color = color.withOpacity(0.45)
+            ..color = color.withValues(alpha: 0.45)
             ..style = PaintingStyle.stroke
             ..strokeWidth = 2,
         );

@@ -53,6 +53,7 @@ class _AppShellState extends State<AppShell> {
       selectedDomainId: _selectedDomainId,
       onSelectDimension: (id) => _selectDimension(id),
       onSelectDomain: (id) => _selectDomain(id),
+      onClose: _toggleEdit,
     );
 
     final child = stackEditPanel

@@ -29,7 +29,7 @@ class StyleLensPanel extends StatelessWidget {
           Text(
             config.subtitle,
             style: const TextStyle(
-              fontSize: 13,
+              fontSize: 14,
               color: DashboardTheme.muted,
               height: 1.5,
             ),
@@ -46,7 +46,7 @@ class StyleLensPanel extends StatelessWidget {
           Text(
             analysis.headline,
             style: const TextStyle(
-              fontSize: 15,
+              fontSize: 16,
               fontWeight: FontWeight.w600,
               color: DashboardTheme.heading,
               height: 1.4,
@@ -56,7 +56,7 @@ class StyleLensPanel extends StatelessWidget {
           Text(
             analysis.narrative,
             style: const TextStyle(
-              fontSize: 13,
+              fontSize: 14,
               color: DashboardTheme.body,
               height: 1.5,
             ),
@@ -71,7 +71,7 @@ class StyleLensPanel extends StatelessWidget {
           Text(
             analysis.suggestedFocus,
             style: const TextStyle(
-              fontSize: 13,
+              fontSize: 14,
               color: DashboardTheme.body,
               height: 1.5,
             ),
@@ -117,13 +117,13 @@ class _SymbolLegend extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(def.emoji, style: const TextStyle(fontSize: 14, height: 1.4)),
+              Text(def.emoji, style: const TextStyle(fontSize: 16, height: 1.4)),
               const SizedBox(width: 8),
               Expanded(
                 child: RichText(
                   text: TextSpan(
                     style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
                       color: DashboardTheme.muted,
                       height: 1.45,
                     ),
@@ -283,7 +283,7 @@ class _BulletSection extends StatelessWidget {
                 const Text(
                   '• ',
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 14,
                     color: DashboardTheme.body,
                     height: 1.5,
                   ),
@@ -292,7 +292,7 @@ class _BulletSection extends StatelessWidget {
                   child: Text(
                     item,
                     style: const TextStyle(
-                      fontSize: 13,
+                      fontSize: 14,
                       color: DashboardTheme.body,
                       height: 1.5,
                     ),

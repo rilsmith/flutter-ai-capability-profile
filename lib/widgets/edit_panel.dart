@@ -15,6 +15,7 @@ class EditPanel extends StatefulWidget {
     required this.selectedDomainId,
     required this.onSelectDimension,
     required this.onSelectDomain,
+    this.onClose,
     this.fullWidth = false,
   });
 
@@ -22,6 +23,7 @@ class EditPanel extends StatefulWidget {
   final int? selectedDomainId;
   final ValueChanged<int> onSelectDimension;
   final ValueChanged<int> onSelectDomain;
+  final VoidCallback? onClose;
   final bool fullWidth;
 
   @override
@@ -32,13 +34,13 @@ class _EditPanelState extends State<EditPanel> {
   final _scrollController = ScrollController();
   final _dimensionKeys = <int, GlobalKey>{};
   final _domainKeys = <int, GlobalKey>{};
+  
   late TextEditingController _titleController;
   late TextEditingController _subtitleController;
   late TextEditingController _introController;
   late TextEditingController _howToReadController;
   late TextEditingController _applicationHowToReadController;
   late TextEditingController _applicationMatrixHowToReadController;
-  int _dataRevision = 0;
 
   @override
   void initState() {
@@ -140,28 +142,8 @@ class _EditPanelState extends State<EditPanel> {
   Widget build(BuildContext context) {
     final notifier = context.watch<DashboardNotifier>();
     final data = notifier.data;
-    final revision = Object.hash(
-      data.title,
-      data.subtitle,
-      data.intro,
-      data.howToRead,
-      data.applicationHowToRead,
-      data.applicationMatrixHowToRead,
-      data.dimensions.map((d) => Object.hash(
-            d.id,
-            d.name,
-            d.score,
-            d.color,
-            d.descriptor,
-          )),
-    );
-    if (revision != _dataRevision) {
-      _dataRevision = revision;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _syncHeaderControllers(data);
-      });
-    }
+    
+    _syncHeaderControllers(data);
 
     return Container(
       width: widget.fullWidth ? double.infinity : 360,
@@ -169,163 +151,172 @@ class _EditPanelState extends State<EditPanel> {
         maxHeight: MediaQuery.sizeOf(context).height - 48,
       ),
       decoration: DashboardTheme.dashboardDecoration(),
-      child: Scrollbar(
-        controller: _scrollController,
-        thumbVisibility: true,
-        child: SingleChildScrollView(
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          dividerColor: Colors.transparent,
+          expansionTileTheme: const ExpansionTileThemeData(
+            tilePadding: EdgeInsets.symmetric(horizontal: 16),
+            childrenPadding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+          ),
+        ),
+        child: Scrollbar(
           controller: _scrollController,
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Edit Dashboard',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: DashboardTheme.heading,
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Changes save automatically. Click a chart label to select a dimension, or drag its point to adjust the score.',
-                style: TextStyle(fontSize: 13, color: DashboardTheme.muted),
-              ),
-              const SizedBox(height: 20),
-              _Section(
-                title: 'Header',
-                children: [
-                  _Field(
-                    label: 'Title',
-                    child: TextField(
-                      controller: _titleController,
-                      onChanged: notifier.updateTitle,
-                      decoration: _inputDecoration(),
-                    ),
-                  ),
-                  _Field(
-                    label: 'Subtitle',
-                    child: TextField(
-                      controller: _subtitleController,
-                      onChanged: notifier.updateSubtitle,
-                      decoration: _inputDecoration(),
-                    ),
-                  ),
-                  _Field(
-                    label: 'Intro',
-                    child: TextField(
-                      controller: _introController,
-                      onChanged: notifier.updateIntro,
-                      maxLines: 5,
-                      decoration: _inputDecoration(),
-                    ),
-                  ),
-                  _Field(
-                    label: 'How to Read — Capabilities',
-                    child: TextField(
-                      controller: _howToReadController,
-                      onChanged: notifier.updateHowToRead,
-                      maxLines: 3,
-                      decoration: _inputDecoration(),
-                    ),
-                  ),
-                  _Field(
-                    label: 'How to Read — SDLC Coverage',
-                    child: TextField(
-                      controller: _applicationHowToReadController,
-                      onChanged: notifier.updateApplicationHowToRead,
-                      maxLines: 3,
-                      decoration: _inputDecoration(),
-                    ),
-                  ),
-                  _Field(
-                    label: 'How to Read — Capability × Domain',
-                    child: TextField(
-                      controller: _applicationMatrixHowToReadController,
-                      onChanged: notifier.updateApplicationMatrixHowToRead,
-                      maxLines: 3,
-                      decoration: _inputDecoration(),
-                    ),
-                  ),
-                ],
-              ),
-              _Section(
-                title: 'Dimensions',
-                children: [
-                  for (final dimension in data.dimensions)
-                    _DimensionEditor(
-                      key: _dimensionKeys.putIfAbsent(
-                        dimension.id,
-                        GlobalKey.new,
-                      ),
-                      dimension: dimension,
-                      maxScore: data.maxScore,
-                      selected: widget.selectedDimensionId == dimension.id,
-                      onSelect: () => widget.onSelectDimension(dimension.id),
-                      onUpdate: (patch) => notifier.patchDimension(
-                        dimension.id,
-                        name: patch.name,
-                        score: patch.score,
-                        color: patch.color,
-                        descriptor: patch.descriptor,
-                      ),
-                    ),
-                ],
-              ),
-              _Section(
-                title: 'Application Domains',
-                children: [
-                  for (final domain in data.applicationDomains)
-                    _ApplicationDomainEditor(
-                      key: _domainKeys.putIfAbsent(domain.id, GlobalKey.new),
-                      domain: domain,
-                      dimensions: data.dimensions,
-                      selected: widget.selectedDomainId == domain.id,
-                      onSelect: () => widget.onSelectDomain(domain.id),
-                      onUpdate: (patch) => notifier.patchApplicationDomain(
-                        domain.id,
-                        name: patch.name,
-                        shortName: patch.shortName,
-                        applicability: patch.applicability,
-                        involvement: patch.involvement,
-                        value: patch.value,
-                        confidence: patch.confidence,
-                        capabilityIds: patch.capabilityIds,
-                      ),
-                    ),
-                ],
-              ),
-              const Divider(color: DashboardTheme.cardBorder),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  OutlinedButton(
-                    onPressed: notifier.resetToDefaults,
-                    style: DashboardTheme.secondaryButton,
-                    child: const Text('Reset to Defaults'),
-                  ),
-                  OutlinedButton(
-                    onPressed: () async {
-                      final success = await notifier.importJson();
-                      if (!context.mounted) return;
-                      if (!success) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Could not import file. Please choose a valid JSON export.',
+          thumbVisibility: true,
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Edit Dashboard',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: DashboardTheme.heading,
                             ),
                           ),
-                        );
-                      }
-                    },
-                    style: DashboardTheme.secondaryButton,
-                    child: const Text('Import JSON'),
+                          if (widget.onClose != null)
+                            IconButton(
+                              onPressed: widget.onClose,
+                              icon: const Icon(Icons.close, size: 20, color: DashboardTheme.muted),
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Changes save automatically. Use the chart or matrix to select items.',
+                        style: TextStyle(fontSize: 13, color: DashboardTheme.muted),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ],
+                ),
+                const SizedBox(height: 20),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 24),
+                  child: Divider(color: DashboardTheme.divider),
+                ),
+                _ExpansionSection(
+                  title: 'Header & Narrative',
+                  icon: Icons.title,
+                  children: [
+                    _Field(
+                      label: 'Title',
+                      child: TextField(
+                        controller: _titleController,
+                        onChanged: notifier.updateTitle,
+                        decoration: _inputDecoration(),
+                      ),
+                    ),
+                    _Field(
+                      label: 'Subtitle',
+                      child: TextField(
+                        controller: _subtitleController,
+                        onChanged: notifier.updateSubtitle,
+                        decoration: _inputDecoration(),
+                      ),
+                    ),
+                    _Field(
+                      label: 'Intro',
+                      child: TextField(
+                        controller: _introController,
+                        onChanged: notifier.updateIntro,
+                        maxLines: 5,
+                        decoration: _inputDecoration(),
+                      ),
+                    ),
+                    _Field(
+                      label: 'How to Read — Capabilities',
+                      child: TextField(
+                        controller: _howToReadController,
+                        onChanged: notifier.updateHowToRead,
+                        maxLines: 3,
+                        decoration: _inputDecoration(),
+                      ),
+                    ),
+                    _Field(
+                      label: 'How to Read — SDLC Coverage',
+                      child: TextField(
+                        controller: _applicationHowToReadController,
+                        onChanged: notifier.updateApplicationHowToRead,
+                        maxLines: 3,
+                        decoration: _inputDecoration(),
+                      ),
+                    ),
+                    _Field(
+                      label: 'How to Read — Capability × Domain',
+                      child: TextField(
+                        controller: _applicationMatrixHowToReadController,
+                        onChanged: notifier.updateApplicationMatrixHowToRead,
+                        maxLines: 3,
+                        decoration: _inputDecoration(),
+                      ),
+                    ),
+                  ],
+                ),
+                _ExpansionSection(
+                  title: 'Capability Dimensions',
+                  icon: Icons.radar,
+                  initiallyExpanded: widget.selectedDimensionId != null,
+                  children: [
+                    for (final dimension in data.dimensions)
+                      _DimensionEditor(
+                        key: _dimensionKeys.putIfAbsent(
+                          dimension.id,
+                          GlobalKey.new,
+                        ),
+                        dimension: dimension,
+                        maxScore: data.maxScore,
+                        selected: widget.selectedDimensionId == dimension.id,
+                        onSelect: () => widget.onSelectDimension(dimension.id),
+                        onUpdate: (patch) => notifier.patchDimension(
+                          dimension.id,
+                          name: patch.name,
+                          score: patch.score,
+                          color: patch.color,
+                          descriptor: patch.descriptor,
+                        ),
+                      ),
+                  ],
+                ),
+                _ExpansionSection(
+                  title: 'SDLC Domains',
+                  icon: Icons.grid_on,
+                  initiallyExpanded: widget.selectedDomainId != null,
+                  children: [
+                    for (final domain in data.applicationDomains)
+                      _ApplicationDomainEditor(
+                        key: _domainKeys.putIfAbsent(domain.id, GlobalKey.new),
+                        domain: domain,
+                        dimensions: data.dimensions,
+                        selected: widget.selectedDomainId == domain.id,
+                        onSelect: () => widget.onSelectDomain(domain.id),
+                        onUpdate: (patch) => notifier.patchApplicationDomain(
+                          domain.id,
+                          name: patch.name,
+                          shortName: patch.shortName,
+                          applicability: patch.applicability,
+                          involvement: patch.involvement,
+                          value: patch.value,
+                          confidence: patch.confidence,
+                          capabilityIds: patch.capabilityIds,
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -352,24 +343,33 @@ class _EditPanelState extends State<EditPanel> {
   }
 }
 
-class _Section extends StatelessWidget {
-  const _Section({required this.title, required this.children});
+class _ExpansionSection extends StatelessWidget {
+  const _ExpansionSection({
+    required this.title,
+    required this.icon,
+    required this.children,
+    this.initiallyExpanded = false,
+  });
 
   final String title;
+  final IconData icon;
   final List<Widget> children;
+  final bool initiallyExpanded;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: DashboardTheme.cardHeading),
-          const SizedBox(height: 12),
-          ...children,
-        ],
+    return ExpansionTile(
+      initiallyExpanded: initiallyExpanded,
+      leading: Icon(icon, size: 20, color: DashboardTheme.primary),
+      title: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: DashboardTheme.heading,
+        ),
       ),
+      children: children,
     );
   }
 }
@@ -457,16 +457,16 @@ class _DimensionEditorState extends State<_DimensionEditor> {
   @override
   void didUpdateWidget(covariant _DimensionEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.dimension.name != widget.dimension.name) {
+    if (oldWidget.dimension.name != widget.dimension.name && _nameController.text != widget.dimension.name) {
       _nameController.text = widget.dimension.name;
     }
-    if (oldWidget.dimension.descriptor != widget.dimension.descriptor) {
+    if (oldWidget.dimension.descriptor != widget.dimension.descriptor && _descriptorController.text != widget.dimension.descriptor) {
       _descriptorController.text = widget.dimension.descriptor;
     }
-    if (oldWidget.dimension.score != widget.dimension.score) {
+    if (oldWidget.dimension.score != widget.dimension.score && _scoreController.text != widget.dimension.score.toString()) {
       _scoreController.text = widget.dimension.score.toString();
     }
-    if (oldWidget.dimension.color != widget.dimension.color) {
+    if (oldWidget.dimension.color != widget.dimension.color && _colorController.text != widget.dimension.color) {
       _colorController.text = widget.dimension.color;
     }
   }
@@ -485,147 +485,129 @@ class _DimensionEditorState extends State<_DimensionEditor> {
     final color = DashboardTheme.parseHex(widget.dimension.color);
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Material(
-        color: widget.selected ? DashboardTheme.primaryLight : const Color(0xFFFAFAFA),
-        borderRadius: BorderRadius.circular(10),
-        child: InkWell(
-          onTap: widget.onSelect,
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: widget.selected ? DashboardTheme.primaryLight : const Color(0xFFFAFAFA),
           borderRadius: BorderRadius.circular(10),
-          child: Container(
-            padding: const EdgeInsets.all(12),
+          border: Border.all(
+            color: widget.selected
+                ? DashboardTheme.primary
+                : const Color(0xFFF3F4F6),
+          ),
+        ),
+        child: ExpansionTile(
+          initiallyExpanded: widget.selected,
+          onExpansionChanged: (expanded) {
+            if (expanded) widget.onSelect();
+          },
+          leading: Container(
+            width: 12,
+            height: 12,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: widget.selected
-                    ? DashboardTheme.primary
-                    : const Color(0xFFF3F4F6),
-              ),
-              boxShadow: widget.selected
-                  ? const [
-                      BoxShadow(
-                        color: Color(0x1F2563EB),
-                        blurRadius: 0,
-                        spreadRadius: 2,
-                      ),
-                    ]
-                  : null,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: color,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Dimension ${widget.dimension.id}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: DashboardTheme.body,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                _Field(
-                  label: 'Name',
-                  child: TextField(
-                    controller: _nameController,
-                    onChanged: (value) =>
-                        widget.onUpdate(_DimensionPatch(name: value)),
-                    decoration: _fieldDecoration(),
-                  ),
-                ),
-                _Field(
-                  label: 'Descriptor',
-                  child: TextField(
-                    controller: _descriptorController,
-                    onChanged: (value) =>
-                        widget.onUpdate(_DimensionPatch(descriptor: value)),
-                    maxLines: 2,
-                    decoration: _fieldDecoration(),
-                  ),
-                ),
-                _Field(
-                  label: 'Score (1–${widget.maxScore})',
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Slider(
-                          value: widget.dimension.score,
-                          min: 1,
-                          max: widget.maxScore.toDouble(),
-                          divisions: (widget.maxScore - 1) * 10,
-                          onChanged: (value) {
-                            final score =
-                                clampScore(value, widget.maxScore);
-                            _scoreController.text = score.toString();
-                            widget.onUpdate(_DimensionPatch(score: score));
-                          },
-                        ),
-                      ),
-                      SizedBox(
-                        width: 64,
-                        child: TextField(
-                          controller: _scoreController,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          onChanged: (value) {
-                            final parsed = double.tryParse(value);
-                            if (parsed == null) return;
-                            widget.onUpdate(
-                              _DimensionPatch(
-                                score: clampScore(parsed, widget.maxScore),
-                              ),
-                            );
-                          },
-                          decoration: _fieldDecoration(),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                _Field(
-                  label: 'Accent color',
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: color,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: DashboardTheme.cardBorder),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: _colorController,
-                          onChanged: (value) {
-                            if (RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(value)) {
-                              widget.onUpdate(_DimensionPatch(color: value));
-                            }
-                          },
-                          decoration: _fieldDecoration(),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+              color: color,
+              shape: BoxShape.circle,
             ),
           ),
+          title: Text(
+            widget.dimension.name,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: DashboardTheme.body,
+            ),
+          ),
+          children: [
+            _Field(
+              label: 'Name',
+              child: TextField(
+                controller: _nameController,
+                onChanged: (value) =>
+                    widget.onUpdate(_DimensionPatch(name: value)),
+                decoration: _fieldDecoration(),
+              ),
+            ),
+            _Field(
+              label: 'Descriptor',
+              child: TextField(
+                controller: _descriptorController,
+                onChanged: (value) =>
+                    widget.onUpdate(_DimensionPatch(descriptor: value)),
+                maxLines: 2,
+                decoration: _fieldDecoration(),
+              ),
+            ),
+            _Field(
+              label: 'Score (1–${widget.maxScore})',
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Slider(
+                      value: widget.dimension.score,
+                      min: 1,
+                      max: widget.maxScore.toDouble(),
+                      divisions: (widget.maxScore - 1) * 10,
+                      onChanged: (value) {
+                        final score =
+                            clampScore(value, widget.maxScore);
+                        _scoreController.text = score.toString();
+                        widget.onUpdate(_DimensionPatch(score: score));
+                      },
+                    ),
+                  ),
+                  SizedBox(
+                    width: 50,
+                    child: TextField(
+                      controller: _scoreController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      style: const TextStyle(fontSize: 13),
+                      onChanged: (value) {
+                        final parsed = double.tryParse(value);
+                        if (parsed == null) return;
+                        widget.onUpdate(
+                          _DimensionPatch(
+                            score: clampScore(parsed, widget.maxScore),
+                          ),
+                        );
+                      },
+                      decoration: _fieldDecoration(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _Field(
+              label: 'Accent color',
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: DashboardTheme.cardBorder),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: _colorController,
+                      style: const TextStyle(fontSize: 13),
+                      onChanged: (value) {
+                        if (RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(value)) {
+                          widget.onUpdate(_DimensionPatch(color: value));
+                        }
+                      },
+                      decoration: _fieldDecoration(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -704,10 +686,10 @@ class _ApplicationDomainEditorState extends State<_ApplicationDomainEditor> {
   @override
   void didUpdateWidget(covariant _ApplicationDomainEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.domain.name != widget.domain.name) {
+    if (oldWidget.domain.name != widget.domain.name && _nameController.text != widget.domain.name) {
       _nameController.text = widget.domain.name;
     }
-    if (oldWidget.domain.shortName != widget.domain.shortName) {
+    if (oldWidget.domain.shortName != widget.domain.shortName && _shortNameController.text != widget.domain.shortName) {
       _shortNameController.text = widget.domain.shortName;
     }
   }
@@ -741,221 +723,214 @@ class _ApplicationDomainEditorState extends State<_ApplicationDomainEditor> {
     final disabled = widget.domain.isNotApplicable;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Material(
-        color: widget.selected ? DashboardTheme.primaryLight : const Color(0xFFFAFAFA),
-        borderRadius: BorderRadius.circular(10),
-        child: InkWell(
-          onTap: widget.onSelect,
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: widget.selected ? DashboardTheme.primaryLight : const Color(0xFFFAFAFA),
           borderRadius: BorderRadius.circular(10),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: widget.selected
-                    ? DashboardTheme.primary
-                    : const Color(0xFFF3F4F6),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Domain ${widget.domain.id}: ${widget.domain.shortName}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: DashboardTheme.body,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                _Field(
-                  label: 'Name',
-                  child: TextField(
-                    controller: _nameController,
-                    onChanged: (value) =>
-                        widget.onUpdate(_ApplicationDomainPatch(name: value)),
-                    decoration: _fieldDecoration(),
-                  ),
-                ),
-                _Field(
-                  label: 'Short label',
-                  child: TextField(
-                    controller: _shortNameController,
-                    onChanged: (value) => widget.onUpdate(
-                      _ApplicationDomainPatch(shortName: value),
-                    ),
-                    decoration: _fieldDecoration(),
-                  ),
-                ),
-                _Field(
-                  label: 'Applicability',
-                  child: DropdownButtonFormField<DomainApplicability>(
-                    value: widget.domain.applicability,
-                    decoration: _fieldDecoration(),
-                    items: const [
-                      DropdownMenuItem(
-                        value: DomainApplicability.inScope,
-                        child: Text('In scope (part of my role)'),
-                      ),
-                      DropdownMenuItem(
-                        value: DomainApplicability.notApplicable,
-                        child: Text('Not applicable (outside my role)'),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value == null) return;
-                      widget.onUpdate(
-                        _ApplicationDomainPatch(applicability: value),
-                      );
-                    },
-                  ),
-                ),
-                const Text(
-                  'N/A excludes this domain from breadth counts and disables inline editing.',
-                  style: TextStyle(fontSize: 11, color: DashboardTheme.subtle),
-                ),
-                const SizedBox(height: 8),
-                _Field(
-                  label: 'Agent involvement',
-                  child: DropdownButtonFormField<DomainInvolvement>(
-                    value: widget.domain.involvement,
-                    decoration: _fieldDecoration(),
-                    items: const [
-                      DropdownMenuItem(
-                        value: DomainInvolvement.none,
-                        child: Text('Never'),
-                      ),
-                      DropdownMenuItem(
-                        value: DomainInvolvement.occasional,
-                        child: Text('Occasional'),
-                      ),
-                      DropdownMenuItem(
-                        value: DomainInvolvement.regular,
-                        child: Text('Regular'),
-                      ),
-                    ],
-                    onChanged: disabled
-                        ? null
-                        : (value) {
-                            if (value == null) return;
-                            widget.onUpdate(
-                              _ApplicationDomainPatch(involvement: value),
-                            );
-                          },
-                  ),
-                ),
-                _Field(
-                  label: 'Perceived value',
-                  child: DropdownButtonFormField<DomainSignal>(
-                    value: widget.domain.value,
-                    decoration: _fieldDecoration(),
-                    items: const [
-                      DropdownMenuItem(
-                        value: DomainSignal.low,
-                        child: Text('Low'),
-                      ),
-                      DropdownMenuItem(
-                        value: DomainSignal.moderate,
-                        child: Text('Moderate'),
-                      ),
-                      DropdownMenuItem(
-                        value: DomainSignal.high,
-                        child: Text('High'),
-                      ),
-                    ],
-                    onChanged: disabled
-                        ? null
-                        : (value) {
-                            if (value == null) return;
-                            widget.onUpdate(
-                              _ApplicationDomainPatch(value: value),
-                            );
-                          },
-                  ),
-                ),
-                _Field(
-                  label: 'Confidence',
-                  child: DropdownButtonFormField<DomainSignal>(
-                    value: widget.domain.confidence,
-                    decoration: _fieldDecoration(),
-                    items: const [
-                      DropdownMenuItem(
-                        value: DomainSignal.low,
-                        child: Text('Low'),
-                      ),
-                      DropdownMenuItem(
-                        value: DomainSignal.moderate,
-                        child: Text('Moderate'),
-                      ),
-                      DropdownMenuItem(
-                        value: DomainSignal.high,
-                        child: Text('High'),
-                      ),
-                    ],
-                    onChanged: disabled
-                        ? null
-                        : (value) {
-                            if (value == null) return;
-                            widget.onUpdate(
-                              _ApplicationDomainPatch(confidence: value),
-                            );
-                          },
-                  ),
-                ),
-                const Text(
-                  'Linked capabilities',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: DashboardTheme.body,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                for (final dimension in widget.dimensions)
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    value: widget.domain.capabilityIds.contains(dimension.id),
-                    onChanged: disabled
-                        ? null
-                        : (checked) {
-                            final ids = List<int>.from(widget.domain.capabilityIds);
-                            if (checked == true) {
-                              ids.add(dimension.id);
-                            } else {
-                              ids.remove(dimension.id);
-                            }
-                            ids.sort();
-                            widget.onUpdate(
-                              _ApplicationDomainPatch(capabilityIds: ids),
-                            );
-                          },
-                    title: Row(
-                      children: [
-                        Container(
-                          width: 12,
-                          height: 12,
-                          decoration: BoxDecoration(
-                            color: DashboardTheme.parseHex(dimension.color),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            dimension.name,
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
+          border: Border.all(
+            color: widget.selected
+                ? DashboardTheme.primary
+                : const Color(0xFFF3F4F6),
+          ),
+        ),
+        child: ExpansionTile(
+          initiallyExpanded: widget.selected,
+          onExpansionChanged: (expanded) {
+            if (expanded) widget.onSelect();
+          },
+          title: Text(
+            widget.domain.shortName,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: DashboardTheme.body,
             ),
           ),
+          children: [
+            _Field(
+              label: 'Name',
+              child: TextField(
+                controller: _nameController,
+                onChanged: (value) =>
+                    widget.onUpdate(_ApplicationDomainPatch(name: value)),
+                decoration: _fieldDecoration(),
+              ),
+            ),
+            _Field(
+              label: 'Short label',
+              child: TextField(
+                controller: _shortNameController,
+                onChanged: (value) => widget.onUpdate(
+                  _ApplicationDomainPatch(shortName: value),
+                ),
+                decoration: _fieldDecoration(),
+              ),
+            ),
+            _Field(
+              label: 'Applicability',
+              child: DropdownButtonFormField<DomainApplicability>(
+                initialValue: widget.domain.applicability,
+                decoration: _fieldDecoration(),
+                isExpanded: true,
+                items: const [
+                  DropdownMenuItem(
+                    value: DomainApplicability.inScope,
+                    child: Text('In scope', style: TextStyle(fontSize: 13)),
+                  ),
+                  DropdownMenuItem(
+                    value: DomainApplicability.notApplicable,
+                    child: Text('Not applicable', style: TextStyle(fontSize: 13)),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  widget.onUpdate(
+                    _ApplicationDomainPatch(applicability: value),
+                  );
+                },
+              ),
+            ),
+            _Field(
+              label: 'Agent involvement',
+              child: DropdownButtonFormField<DomainInvolvement>(
+                initialValue: widget.domain.involvement,
+                decoration: _fieldDecoration(),
+                isExpanded: true,
+                items: const [
+                  DropdownMenuItem(
+                    value: DomainInvolvement.none,
+                    child: Text('Never', style: TextStyle(fontSize: 13)),
+                  ),
+                  DropdownMenuItem(
+                    value: DomainInvolvement.occasional,
+                    child: Text('Occasional', style: TextStyle(fontSize: 13)),
+                  ),
+                  DropdownMenuItem(
+                    value: DomainInvolvement.regular,
+                    child: Text('Regular', style: TextStyle(fontSize: 13)),
+                  ),
+                ],
+                onChanged: disabled
+                    ? null
+                    : (value) {
+                        if (value == null) return;
+                        widget.onUpdate(
+                          _ApplicationDomainPatch(involvement: value),
+                        );
+                      },
+              ),
+            ),
+            _Field(
+              label: 'Perceived value',
+              child: DropdownButtonFormField<DomainSignal>(
+                initialValue: widget.domain.value,
+                decoration: _fieldDecoration(),
+                isExpanded: true,
+                items: const [
+                  DropdownMenuItem(
+                    value: DomainSignal.low,
+                    child: Text('Low', style: TextStyle(fontSize: 13)),
+                  ),
+                  DropdownMenuItem(
+                    value: DomainSignal.moderate,
+                    child: Text('Moderate', style: TextStyle(fontSize: 13)),
+                  ),
+                  DropdownMenuItem(
+                    value: DomainSignal.high,
+                    child: Text('High', style: TextStyle(fontSize: 13)),
+                  ),
+                ],
+                onChanged: disabled
+                    ? null
+                    : (value) {
+                        if (value == null) return;
+                        widget.onUpdate(
+                          _ApplicationDomainPatch(value: value),
+                        );
+                      },
+              ),
+            ),
+            _Field(
+              label: 'Confidence',
+              child: DropdownButtonFormField<DomainSignal>(
+                initialValue: widget.domain.confidence,
+                decoration: _fieldDecoration(),
+                isExpanded: true,
+                items: const [
+                  DropdownMenuItem(
+                    value: DomainSignal.low,
+                    child: Text('Low', style: TextStyle(fontSize: 13)),
+                  ),
+                  DropdownMenuItem(
+                    value: DomainSignal.moderate,
+                    child: Text('Moderate', style: TextStyle(fontSize: 13)),
+                  ),
+                  DropdownMenuItem(
+                    value: DomainSignal.high,
+                    child: Text('High', style: TextStyle(fontSize: 13)),
+                  ),
+                ],
+                onChanged: disabled
+                    ? null
+                    : (value) {
+                        if (value == null) return;
+                        widget.onUpdate(
+                          _ApplicationDomainPatch(confidence: value),
+                        );
+                      },
+              ),
+            ),
+            const Text(
+              'Linked capabilities',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: DashboardTheme.body,
+              ),
+            ),
+            const SizedBox(height: 8),
+            for (final dimension in widget.dimensions)
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: widget.domain.capabilityIds.contains(dimension.id),
+                onChanged: disabled
+                    ? null
+                    : (checked) {
+                        final ids = List<int>.from(widget.domain.capabilityIds);
+                        if (checked == true) {
+                          ids.add(dimension.id);
+                        } else {
+                          ids.remove(dimension.id);
+                        }
+                        ids.sort();
+                        widget.onUpdate(
+                          _ApplicationDomainPatch(capabilityIds: ids),
+                        );
+                      },
+                title: Row(
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: DashboardTheme.parseHex(dimension.color),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        dimension.name,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
         ),
       ),
     );

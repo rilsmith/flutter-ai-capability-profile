@@ -1,7 +1,8 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../models/distribution.dart';
 import '../providers/dashboard_notifier.dart';
 import '../theme/dashboard_theme.dart';
 import '../data/style_lens_config.dart';
@@ -47,7 +48,6 @@ class DashboardScreen extends StatelessWidget {
       data.applicationDomains,
       data.tiers,
     );
-    final width = MediaQuery.sizeOf(context).width;
 
     void handleSelectDimension(int id) {
       onSelectDimension(selectedDimensionId == id ? null : id);
@@ -73,16 +73,14 @@ class DashboardScreen extends StatelessWidget {
       maxScore: data.maxScore,
       selectedDimensionId: selectedDimensionId,
     );
-    final chart = Center(
-      child: InteractiveRadarChart(
-        dimensions: data.dimensions,
-        maxScore: data.maxScore,
-        editing: editing,
-        selectedDimensionId: selectedDimensionId,
-        onSelectDimension: handleSelectDimension,
-        onUpdateScore: (id, score) =>
-            notifier.patchDimension(id, score: score),
-      ),
+    final chart = InteractiveRadarChart(
+      dimensions: data.dimensions,
+      maxScore: data.maxScore,
+      editing: editing,
+      selectedDimensionId: selectedDimensionId,
+      onSelectDimension: handleSelectDimension,
+      onUpdateScore: (id, score) =>
+          notifier.patchDimension(id, score: score),
     );
     final styleLensPanel = StyleLensPanel(
       analysis: styleLens,
@@ -116,70 +114,101 @@ class DashboardScreen extends StatelessWidget {
     );
     final profileInsights = ProfileInsightsCard(insights: insights);
 
-    final chartHeight = width <= 700 ? 420.0 : width <= 1100 ? 480.0 : 520.0;
-    final sideBySide = width > 960;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final padding = width <= 600 ? 40 : 80;
+        final availableInnerWidth = width - padding;
+        
+        final sideBySide = width > 900;
+        final chartHeight = width <= 600 ? 520.0 : width <= 900 ? 580.0 : 640.0;
+        
+        final columnWidth = sideBySide ? (availableInnerWidth - 24) * 0.6 : availableInnerWidth;
+        final effectiveChartSize = math.min(chartHeight, columnWidth) * 0.94;
 
-    final chartSection = sideBySide
-        ? SizedBox(
-            height: chartHeight,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(flex: 3, child: chart),
-                const SizedBox(width: 24),
-                Expanded(flex: 2, child: SingleChildScrollView(child: styleLensPanel)),
-              ],
-            ),
-          )
-        : Column(
+        final chartSection = sideBySide
+            ? SizedBox(
+                height: chartHeight,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: Center(
+                        child: SizedBox(
+                          width: effectiveChartSize,
+                          height: effectiveChartSize,
+                          child: chart,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 24),
+                    Expanded(
+                      flex: 2,
+                      child: SingleChildScrollView(child: styleLensPanel),
+                    ),
+                  ],
+                ),
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: SizedBox(
+                      width: effectiveChartSize,
+                      height: effectiveChartSize,
+                      child: chart,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  styleLensPanel,
+                ],
+              );
+
+        return Container(
+          padding: EdgeInsets.fromLTRB(
+            width <= 600 ? 20 : 40,
+            36,
+            width <= 600 ? 20 : 40,
+            32,
+          ),
+          decoration: DashboardTheme.dashboardDecoration(),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(height: chartHeight, child: chart),
+              Header(
+                title: data.title,
+                subtitle: data.subtitle,
+                editing: editing,
+                onToggleEdit: onToggleEdit,
+                onExport: notifier.exportJson,
+                onImport: notifier.importJson,
+                onReset: notifier.resetToDefaults,
+              ),
+              const SizedBox(height: 28),
+              intro,
+              if (data.intro.trim().isNotEmpty) ...[
+                const SizedBox(height: 20),
+              ],
+              capabilityHowToRead,
               const SizedBox(height: 20),
-              styleLensPanel,
+              chartSection,
+              const SizedBox(height: 20),
+              capabilityProfile,
+              const SizedBox(height: 20),
+              applicationCoverageHowToRead,
+              const SizedBox(height: 20),
+              applicationCoverage,
+              const SizedBox(height: 20),
+              applicationMatrixHowToRead,
+              const SizedBox(height: 20),
+              matrix,
+              const SizedBox(height: 20),
+              profileInsights,
             ],
-          );
-
-    return Container(
-      padding: EdgeInsets.fromLTRB(
-        width <= 700 ? 20 : 40,
-        36,
-        width <= 700 ? 20 : 40,
-        32,
-      ),
-      decoration: DashboardTheme.dashboardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Header(
-            title: data.title,
-            subtitle: data.subtitle,
-            editing: editing,
-            onToggleEdit: onToggleEdit,
-            onExport: notifier.exportJson,
           ),
-          const SizedBox(height: 28),
-          intro,
-          if (data.intro.trim().isNotEmpty) ...[
-            const SizedBox(height: 20),
-          ],
-          capabilityHowToRead,
-          const SizedBox(height: 20),
-          chartSection,
-          const SizedBox(height: 20),
-          capabilityProfile,
-          const SizedBox(height: 20),
-          applicationCoverageHowToRead,
-          const SizedBox(height: 20),
-          applicationCoverage,
-          const SizedBox(height: 20),
-          applicationMatrixHowToRead,
-          const SizedBox(height: 20),
-          matrix,
-          const SizedBox(height: 20),
-          profileInsights,
-        ],
-      ),
+        );
+      },
     );
   }
 }
