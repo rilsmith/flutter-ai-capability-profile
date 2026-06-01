@@ -31,6 +31,13 @@
 
   <title>AI Capability Dashboard</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    /* Applied while dragging a radar point (see browser_touch_lock_web.dart). */
+    body.chart-radar-dragging {
+      touch-action: none;
+      overscroll-behavior: none;
+    }
+  </style>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>

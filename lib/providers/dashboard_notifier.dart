@@ -9,6 +9,7 @@ import '../data/defaults.dart';
 import '../models/application_domain.dart';
 import '../models/dashboard_data.dart';
 import '../utils/application_sync.dart';
+import '../models/dimension.dart';
 import '../utils/json_export_web.dart'
     if (dart.library.io) '../utils/json_export_stub.dart';
 import '../utils/migrate_application_domains.dart';
@@ -22,9 +23,27 @@ class DashboardNotifier extends ChangeNotifier {
   DashboardData _data = defaultDashboardData;
   bool _initialized = false;
   Timer? _persistTimer;
+  int? _previewDimensionId;
+  double? _previewScore;
 
   DashboardData get data => _data;
   bool get initialized => _initialized;
+
+  /// Dimensions with in-flight radar drag score overlaid (no persistence).
+  List<Dimension> get effectiveDimensions {
+    if (_previewDimensionId == null || _previewScore == null) {
+      return _data.dimensions;
+    }
+    return _data.dimensions
+        .map(
+          (d) => d.id == _previewDimensionId
+              ? d.copyWith(score: _previewScore!)
+              : d,
+        )
+        .toList();
+  }
+
+  bool get isDragPreviewActive => _previewDimensionId != null;
 
   @override
   void dispose() {
@@ -131,6 +150,22 @@ class DashboardNotifier extends ChangeNotifier {
     _schedulePersist();
   }
 
+  void setDragPreview(int dimensionId, double score) {
+    if (_previewDimensionId == dimensionId && _previewScore == score) {
+      return;
+    }
+    _previewDimensionId = dimensionId;
+    _previewScore = score;
+    notifyListeners();
+  }
+
+  void clearDragPreview() {
+    if (_previewDimensionId == null) return;
+    _previewDimensionId = null;
+    _previewScore = null;
+    notifyListeners();
+  }
+
   void patchDimension(
     int id, {
     String? name,
@@ -138,6 +173,8 @@ class DashboardNotifier extends ChangeNotifier {
     String? color,
     String? descriptor,
   }) {
+    _previewDimensionId = null;
+    _previewScore = null;
     _data = _data.copyWith(
       dimensions: _data.dimensions
           .map(

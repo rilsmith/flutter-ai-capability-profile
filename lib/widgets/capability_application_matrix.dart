@@ -4,12 +4,14 @@ import '../models/application_domain.dart';
 import '../models/dimension.dart';
 import '../theme/dashboard_theme.dart';
 import '../utils/application.dart';
+import 'capability_definition_dialog.dart';
 
 class CapabilityApplicationMatrix extends StatelessWidget {
   const CapabilityApplicationMatrix({
     super.key,
     required this.dimensions,
     required this.domains,
+    required this.maxScore,
     this.selectedDimensionId,
     this.selectedDomainId,
     this.onSelectDimension,
@@ -19,6 +21,7 @@ class CapabilityApplicationMatrix extends StatelessWidget {
 
   final List<Dimension> dimensions;
   final List<ApplicationDomain> domains;
+  final int maxScore;
   final int? selectedDimensionId;
   final int? selectedDomainId;
   final ValueChanged<int>? onSelectDimension;
@@ -40,6 +43,11 @@ class CapabilityApplicationMatrix extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text('Capability × Domain Links', style: DashboardTheme.cardHeading),
+          const SizedBox(height: 6),
+          const Text(
+            'Tap ⓘ beside a capability for its definition. Tap cells to toggle links.',
+            style: TextStyle(fontSize: 12, color: DashboardTheme.muted, height: 1.35),
+          ),
           const SizedBox(height: 16),
           LayoutBuilder(
             builder: (context, constraints) {
@@ -89,6 +97,7 @@ class CapabilityApplicationMatrix extends StatelessWidget {
                     width: _capabilityWidth,
                     headerHeight: headerHeight,
                     dimensions: dimensions,
+                    maxScore: maxScore,
                     selectedDimensionId: selectedDimensionId,
                     onSelectDimension: onSelectDimension,
                   ),
@@ -127,6 +136,7 @@ class _CapabilityColumn extends StatelessWidget {
     required this.width,
     required this.headerHeight,
     required this.dimensions,
+    required this.maxScore,
     required this.selectedDimensionId,
     required this.onSelectDimension,
   });
@@ -134,6 +144,7 @@ class _CapabilityColumn extends StatelessWidget {
   final double width;
   final double headerHeight;
   final List<Dimension> dimensions;
+  final int maxScore;
   final int? selectedDimensionId;
   final ValueChanged<int>? onSelectDimension;
 
@@ -179,6 +190,24 @@ class _CapabilityColumn extends StatelessWidget {
                                   ? DashboardTheme.primary
                                   : DashboardTheme.body,
                             ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.info_outline,
+                            size: 16,
+                            color: DashboardTheme.muted,
+                          ),
+                          tooltip: 'Capability definition',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 28,
+                            minHeight: 28,
+                          ),
+                          onPressed: () => showCapabilityDefinitionDialog(
+                            context,
+                            dimension,
+                            maxScore: maxScore,
                           ),
                         ),
                       ],

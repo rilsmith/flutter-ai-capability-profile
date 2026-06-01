@@ -1,10 +1,13 @@
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../models/dimension.dart';
 import '../theme/dashboard_theme.dart';
+import '../utils/browser_touch_lock.dart';
 import '../utils/compute.dart';
+import 'chart_scroll_lock.dart';
 
 const _viewBox = 1100.0;
 const _cx = 550.0;
@@ -22,6 +25,8 @@ class InteractiveRadarChart extends StatefulWidget {
     this.editing = false,
     this.selectedDimensionId,
     this.onSelectDimension,
+    this.onDragPreview,
+    this.onDragCancel,
     this.onUpdateScore,
   });
 
@@ -30,6 +35,8 @@ class InteractiveRadarChart extends StatefulWidget {
   final bool editing;
   final int? selectedDimensionId;
   final ValueChanged<int>? onSelectDimension;
+  final void Function(int id, double score)? onDragPreview;
+  final VoidCallback? onDragCancel;
   final void Function(int id, double score)? onUpdateScore;
 
   @override
@@ -39,14 +46,16 @@ class InteractiveRadarChart extends StatefulWidget {
 class _InteractiveRadarChartState extends State<InteractiveRadarChart> {
   int? _draggingId;
   bool _dragMoved = false;
+  ScrollHoldController? _scrollHold;
+  ChartScrollLock? _scrollLockHost;
 
   bool get _canDrag => widget.onUpdateScore != null;
   bool get _canSelect => widget.onSelectDimension != null;
 
   double get _angleStep => 360 / widget.dimensions.length;
 
-  Offset _pointForIndex(int index) {
-    final dimension = widget.dimensions[index];
+  Offset _pointForIndex(int index, List<Dimension> dimensions) {
+    final dimension = dimensions[index];
     final polar = polarToXY(
       _cx,
       _cy,
@@ -56,11 +65,11 @@ class _InteractiveRadarChartState extends State<InteractiveRadarChart> {
     return Offset(polar.x, polar.y);
   }
 
-  void _applyScore(int dimensionId, Offset viewBox) {
+  double _scoreAtViewBox(int dimensionId, Offset viewBox) {
     final index = widget.dimensions.indexWhere((d) => d.id == dimensionId);
-    if (index == -1) return;
+    if (index == -1) return 0;
 
-    final score = scoreFromAxisPoint(
+    return scoreFromAxisPoint(
       viewBox.dx,
       viewBox.dy,
       _cx,
@@ -69,7 +78,20 @@ class _InteractiveRadarChartState extends State<InteractiveRadarChart> {
       _maxRadius,
       widget.maxScore,
     );
+  }
+
+  void _commitScore(int dimensionId, double score) {
     widget.onUpdateScore!(dimensionId, score);
+  }
+
+  int? _dotAtPosition(Offset viewBox, List<Dimension> dimensions) {
+    for (var i = 0; i < dimensions.length; i++) {
+      final center = _pointForIndex(i, dimensions);
+      if ((viewBox - center).distance <= _dotHitRadius) {
+        return dimensions[i].id;
+      }
+    }
+    return null;
   }
 
   void _handleAxisTap(Offset viewBox) {
@@ -90,40 +112,93 @@ class _InteractiveRadarChartState extends State<InteractiveRadarChart> {
     }
 
     final dimension = widget.dimensions[index];
-    _applyScore(dimension.id, viewBox);
+    _commitScore(dimension.id, _scoreAtViewBox(dimension.id, viewBox));
     if (_canSelect) {
       widget.onSelectDimension!(dimension.id);
     }
   }
 
-  void _startDotDrag(int dimensionId) {
-    _dragMoved = false;
-    setState(() => _draggingId = dimensionId);
-    if (_canSelect && widget.editing) {
-      widget.onSelectDimension!(dimensionId);
+  void _releaseScrollHold() {
+    _scrollHold?.cancel();
+    _scrollHold = null;
+  }
+
+  void _acquireScrollHold() {
+    _scrollHold?.cancel();
+    final position = Scrollable.maybeOf(context)?.position;
+    if (position != null) {
+      _scrollHold = position.hold(() {});
     }
   }
 
-  void _moveDotDrag(Offset viewBox) {
+  void _setDragScrollLocked(bool locked) {
+    _scrollLockHost?.setLocked(locked);
+    setBrowserTouchLockEnabled(locked);
+    if (locked) {
+      _acquireScrollHold();
+    } else {
+      _releaseScrollHold();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _scrollLockHost = ChartScrollLock.maybeOf(context);
+  }
+
+  void _startDotDrag(int dimensionId) {
+    final dimension = widget.dimensions.firstWhere((d) => d.id == dimensionId);
+    _dragMoved = false;
+    _setDragScrollLocked(true);
+    setState(() => _draggingId = dimensionId);
+    widget.onDragPreview?.call(dimensionId, dimension.score);
+  }
+
+  void _updateDragPreview(Offset viewBox) {
     if (_draggingId == null) return;
+
     _dragMoved = true;
-    _applyScore(_draggingId!, viewBox);
+    final score = _scoreAtViewBox(_draggingId!, viewBox);
+    widget.onDragPreview?.call(_draggingId!, score);
   }
 
   void _endDotDrag(int dimensionId, Offset viewBox) {
     if (_draggingId != dimensionId) return;
 
-    if (!_dragMoved) {
-      _applyScore(dimensionId, viewBox);
-    }
+    final score = _dragMoved
+        ? widget.dimensions
+            .firstWhere((d) => d.id == dimensionId)
+            .score
+        : _scoreAtViewBox(dimensionId, viewBox);
+    _commitScore(dimensionId, score);
     if (_canSelect && !_dragMoved) {
       widget.onSelectDimension!(dimensionId);
     }
     setState(() => _draggingId = null);
+    _setDragScrollLocked(false);
+  }
+
+  void _cancelDotDrag() {
+    if (_draggingId == null) return;
+
+    widget.onDragCancel?.call();
+    setState(() => _draggingId = null);
+    _setDragScrollLocked(false);
+  }
+
+  @override
+  void dispose() {
+    _scrollLockHost?.setLocked(false);
+    setBrowserTouchLockEnabled(false);
+    _releaseScrollHold();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final displayDimensions = widget.dimensions;
+
     return AspectRatio(
       aspectRatio: 1,
       child: FittedBox(
@@ -131,30 +206,43 @@ class _InteractiveRadarChartState extends State<InteractiveRadarChart> {
         child: SizedBox(
           width: _viewBox,
           height: _viewBox,
-          child: Listener(
+          child: RawGestureDetector(
             behavior: HitTestBehavior.translucent,
-            onPointerMove: (event) {
-              if (_draggingId != null) {
-                _moveDotDrag(event.localPosition);
-              }
-            },
-            onPointerUp: (event) {
-              if (_draggingId != null) {
-                _endDotDrag(_draggingId!, event.localPosition);
-              }
-            },
-            onPointerCancel: (event) {
-              if (_draggingId != null) {
-                setState(() => _draggingId = null);
-              }
-            },
+            gestures: _canDrag
+                ? <Type, GestureRecognizerFactory>{
+                    _DotPanGestureRecognizer:
+                        GestureRecognizerFactoryWithHandlers<
+                            _DotPanGestureRecognizer>(
+                      () => _DotPanGestureRecognizer(debugOwner: this),
+                      (_DotPanGestureRecognizer recognizer) {
+                        recognizer.hitTestDot = (local) => _dotAtPosition(
+                              local,
+                              widget.dimensions,
+                            );
+                        recognizer.onDotPanStart = _startDotDrag;
+                        recognizer.onUpdate = (details) {
+                          _updateDragPreview(details.localPosition);
+                        };
+                        recognizer.onEnd = (details) {
+                          if (_draggingId != null) {
+                            _endDotDrag(
+                              _draggingId!,
+                              details.localPosition,
+                            );
+                          }
+                        };
+                        recognizer.onCancel = _cancelDotDrag;
+                      },
+                    ),
+                  }
+                : const <Type, GestureRecognizerFactory>{},
             child: Stack(
               clipBehavior: Clip.none,
               children: [
                 CustomPaint(
                   size: const Size(_viewBox, _viewBox),
                   painter: _RadarVisualPainter(
-                    dimensions: widget.dimensions,
+                    dimensions: displayDimensions,
                     maxScore: widget.maxScore,
                     selectedDimensionId: widget.selectedDimensionId,
                     draggingId: _draggingId,
@@ -171,6 +259,8 @@ class _InteractiveRadarChartState extends State<InteractiveRadarChart> {
                       child: GestureDetector(
                         behavior: HitTestBehavior.translucent,
                         onTapUp: (details) {
+                          if (_draggingId != null) return;
+
                           final viewBox = Offset(
                             _cx - _maxRadius + details.localPosition.dx,
                             _cy - _maxRadius + details.localPosition.dy,
@@ -182,13 +272,11 @@ class _InteractiveRadarChartState extends State<InteractiveRadarChart> {
                     ),
                   ),
                 if (_canDrag)
-                  for (var i = 0; i < widget.dimensions.length; i++)
+                  for (var i = 0; i < displayDimensions.length; i++)
                     _DotHitTarget(
-                      key: ValueKey(widget.dimensions[i].id),
-                      center: _pointForIndex(i),
-                      dragging: _draggingId == widget.dimensions[i].id,
-                      onDragStart: () =>
-                          _startDotDrag(widget.dimensions[i].id),
+                      key: ValueKey(displayDimensions[i].id),
+                      center: _pointForIndex(i, displayDimensions),
+                      dragging: _draggingId == displayDimensions[i].id,
                     ),
                 for (var i = 0; i < widget.dimensions.length; i++)
                   _DimensionLabel(
@@ -212,17 +300,35 @@ class _InteractiveRadarChartState extends State<InteractiveRadarChart> {
   }
 }
 
+/// Pan recognizer that only competes with scroll when the pointer down is on a dot.
+class _DotPanGestureRecognizer extends PanGestureRecognizer {
+  _DotPanGestureRecognizer({super.debugOwner});
+
+  int? Function(Offset localPosition)? hitTestDot;
+  void Function(int dimensionId)? onDotPanStart;
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    if (hitTestDot == null) return;
+
+    final dotId = hitTestDot!(event.localPosition);
+    if (dotId == null) return;
+
+    onDotPanStart?.call(dotId);
+    super.addAllowedPointer(event);
+    resolve(GestureDisposition.accepted);
+  }
+}
+
 class _DotHitTarget extends StatelessWidget {
   const _DotHitTarget({
     super.key,
     required this.center,
     required this.dragging,
-    required this.onDragStart,
   });
 
   final Offset center;
   final bool dragging;
-  final VoidCallback onDragStart;
 
   @override
   Widget build(BuildContext context) {
@@ -234,11 +340,7 @@ class _DotHitTarget extends StatelessWidget {
       height: size,
       child: MouseRegion(
         cursor: dragging ? SystemMouseCursors.grabbing : SystemMouseCursors.grab,
-        child: Listener(
-          behavior: HitTestBehavior.opaque,
-          onPointerDown: (_) => onDragStart(),
-          child: const SizedBox.expand(),
-        ),
+        child: const SizedBox.expand(),
       ),
     );
   }
