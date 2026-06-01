@@ -20,56 +20,72 @@ class Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final isMobile = width <= 600;
+
+    final titleSection = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 26,
+            fontWeight: FontWeight.w700,
+            color: DashboardTheme.heading,
+            letterSpacing: -0.52,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          subtitle,
+          style: const TextStyle(
+            fontSize: 14,
+            color: DashboardTheme.muted,
+          ),
+        ),
+      ],
+    );
+
+    final actionSection = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        OutlinedButton(
+          onPressed: onExport,
+          style: DashboardTheme.secondaryButton,
+          child: const Text('Export JSON'),
+        ),
+        editing
+            ? FilledButton(
+                onPressed: onToggleEdit,
+                style: DashboardTheme.primaryButton,
+                child: const Text('Done Editing'),
+              )
+            : OutlinedButton(
+                onPressed: onToggleEdit,
+                style: DashboardTheme.secondaryButton,
+                child: const Text('Edit Dashboard'),
+              ),
+      ],
+    );
+
+    if (isMobile) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          titleSection,
+          const SizedBox(height: 20),
+          actionSection,
+        ],
+      );
+    }
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w700,
-                  color: DashboardTheme.heading,
-                  letterSpacing: -0.52,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: DashboardTheme.muted,
-                ),
-              ),
-            ],
-          ),
-        ),
+        Expanded(child: titleSection),
         const SizedBox(width: 16),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            OutlinedButton(
-              onPressed: onExport,
-              style: DashboardTheme.secondaryButton,
-              child: const Text('Export JSON'),
-            ),
-            editing
-                ? FilledButton(
-                    onPressed: onToggleEdit,
-                    style: DashboardTheme.primaryButton,
-                    child: const Text('Done Editing'),
-                  )
-                : OutlinedButton(
-                    onPressed: onToggleEdit,
-                    style: DashboardTheme.secondaryButton,
-                    child: const Text('Edit Dashboard'),
-                  ),
-          ],
-        ),
+        actionSection,
       ],
     );
   }

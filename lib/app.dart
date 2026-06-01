@@ -10,19 +10,15 @@ class AiCapabilityDashboardApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => DashboardNotifier(),
-      child: MaterialApp(
-        title: 'AI Capability Dashboard',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          useMaterial3: true,
-          scaffoldBackgroundColor: DashboardTheme.background,
-          fontFamily: 'Inter',
-          colorScheme: ColorScheme.fromSeed(seedColor: DashboardTheme.primary),
-        ),
-        home: const _HomePage(),
+    return MaterialApp(
+      title: 'AI Capability Dashboard',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        scaffoldBackgroundColor: DashboardTheme.background,
+        colorScheme: ColorScheme.fromSeed(seedColor: DashboardTheme.primary),
       ),
+      home: const _HomePage(),
     );
   }
 }
@@ -36,7 +32,16 @@ class _HomePage extends StatelessWidget {
 
     if (!notifier.initialized) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 20),
+              Text('Initializing Dashboard...'),
+            ],
+          ),
+        ),
       );
     }
 

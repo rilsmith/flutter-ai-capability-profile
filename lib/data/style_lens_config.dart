@@ -73,7 +73,7 @@ class StyleLensConfig {
 const styleLensConfig = StyleLensConfig(
   title: 'Engineering Style Lens',
   subtitle:
-      'How your capability scores cluster into four working styles — descriptive, not a maturity level.',
+      'How your capability scores cluster into four working styles — descriptive, not a linear progression.',
   blendThreshold: 0.35,
   weakestTieThreshold: 0.15,
   symbols: {
