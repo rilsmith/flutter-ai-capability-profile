@@ -258,7 +258,7 @@ List<String> _buildStrengths({
 }) {
   if (isBalanced) {
     return [
-      'Even distribution across Sword, Shield, Cog, and Banner — no single style dominates.',
+      'Even distribution across Warrior, Paladin, Artificer, and Commander — no single style dominates.',
       'Capability investment appears spread across execution, assurance, enablement, and coordination.',
     ];
   }

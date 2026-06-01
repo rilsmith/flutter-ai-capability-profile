@@ -42,7 +42,7 @@ void main() {
       expect(analysis.dominantSymbols.length, StyleSymbol.values.length);
     });
 
-    test('shield-heavy profile makes shield dominant and sword weakest', () {
+    test('paladin-heavy profile makes paladin dominant and warrior weakest', () {
       final dimensions = defaultDashboardData.dimensions
           .map(
             (d) => d.copyWith(
@@ -60,17 +60,17 @@ void main() {
         maxScore: maxScore,
       );
 
-      expect(analysis.scoreFor(StyleSymbol.shield), greaterThan(3.5));
+      expect(analysis.scoreFor(StyleSymbol.paladin), greaterThan(3.5));
       expect(
-        analysis.scoreFor(StyleSymbol.sword),
-        lessThan(analysis.scoreFor(StyleSymbol.shield)),
+        analysis.scoreFor(StyleSymbol.warrior),
+        lessThan(analysis.scoreFor(StyleSymbol.paladin)),
       );
-      expect(analysis.dominantSymbols, contains(StyleSymbol.shield));
-      expect(analysis.weakestSymbols, contains(StyleSymbol.sword));
-      expect(analysis.headline, contains('Shield'));
+      expect(analysis.dominantSymbols, contains(StyleSymbol.paladin));
+      expect(analysis.weakestSymbols, contains(StyleSymbol.warrior));
+      expect(analysis.headline, contains('Paladin'));
     });
 
-    test('cog and banner blend when scores are within threshold', () {
+    test('artificer and commander blend when scores are within threshold', () {
       final dimensions = defaultDashboardData.dimensions
           .map(
             (d) => d.copyWith(
@@ -89,11 +89,11 @@ void main() {
         maxScore: maxScore,
       );
 
-      final cog = analysis.scoreFor(StyleSymbol.cog);
-      final banner = analysis.scoreFor(StyleSymbol.banner);
-      expect((cog - banner).abs(), lessThanOrEqualTo(styleLensConfig.blendThreshold));
-      expect(analysis.dominantSymbols, contains(StyleSymbol.cog));
-      expect(analysis.dominantSymbols, contains(StyleSymbol.banner));
+      final artificer = analysis.scoreFor(StyleSymbol.artificer);
+      final commander = analysis.scoreFor(StyleSymbol.commander);
+      expect((artificer - commander).abs(), lessThanOrEqualTo(styleLensConfig.blendThreshold));
+      expect(analysis.dominantSymbols, contains(StyleSymbol.artificer));
+      expect(analysis.dominantSymbols, contains(StyleSymbol.commander));
       expect(analysis.headline, contains('&'));
     });
 
@@ -109,7 +109,7 @@ void main() {
 
       expect(analysis.selectedDimensionHint, isNotNull);
       expect(analysis.selectedDimensionHint, contains('Human-Agent Interaction'));
-      expect(analysis.selectedDimensionHint, contains('Sword'));
+      expect(analysis.selectedDimensionHint, contains('Warrior'));
       expect(analysis.selectedDimensionHint, contains('75%'));
     });
   });
@@ -141,10 +141,10 @@ void main() {
 
       expect(find.text('Engineering Style Lens'), findsOneWidget);
       expect(find.text('Suggested focus'), findsOneWidget);
-      expect(find.textContaining('Sword'), findsWidgets);
-      expect(find.textContaining('Shield'), findsWidgets);
-      expect(find.textContaining('Cog'), findsWidgets);
-      expect(find.textContaining('Banner'), findsWidgets);
+      expect(find.textContaining('Warrior'), findsWidgets);
+      expect(find.textContaining('Paladin'), findsWidgets);
+      expect(find.textContaining('Artificer'), findsWidgets);
+      expect(find.textContaining('Commander'), findsWidgets);
 
       addTearDown(() => tester.binding.setSurfaceSize(null));
     });

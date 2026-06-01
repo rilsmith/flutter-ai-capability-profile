@@ -1,8 +1,8 @@
 enum StyleSymbol {
-  sword,
-  shield,
-  cog,
-  banner,
+  warrior,
+  paladin,
+  artificer,
+  commander,
 }
 
 class SymbolDefinition {
@@ -23,25 +23,25 @@ class SymbolDefinition {
 
 class DimensionSymbolWeights {
   const DimensionSymbolWeights({
-    required this.sword,
-    required this.shield,
-    required this.cog,
-    required this.banner,
+    required this.warrior,
+    required this.paladin,
+    required this.artificer,
+    required this.commander,
   });
 
-  final double sword;
-  final double shield;
-  final double cog;
-  final double banner;
+  final double warrior;
+  final double paladin;
+  final double artificer;
+  final double commander;
 
   double forSymbol(StyleSymbol symbol) => switch (symbol) {
-        StyleSymbol.sword => sword,
-        StyleSymbol.shield => shield,
-        StyleSymbol.cog => cog,
-        StyleSymbol.banner => banner,
+        StyleSymbol.warrior => warrior,
+        StyleSymbol.paladin => paladin,
+        StyleSymbol.artificer => artificer,
+        StyleSymbol.commander => commander,
       };
 
-  double get total => sword + shield + cog + banner;
+  double get total => warrior + paladin + artificer + commander;
 }
 
 class StyleLensConfig {
@@ -77,33 +77,33 @@ const styleLensConfig = StyleLensConfig(
   blendThreshold: 0.35,
   weakestTieThreshold: 0.15,
   symbols: {
-    StyleSymbol.sword: SymbolDefinition(
+    StyleSymbol.warrior: SymbolDefinition(
       emoji: '⚔️',
-      label: 'Sword',
+      label: 'Warrior',
       shortDescription:
           'Implementation and execution — turning intent into working output with agents',
       color: '#DC2626',
       styleLabel: 'Hands-on Executor',
     ),
-    StyleSymbol.shield: SymbolDefinition(
+    StyleSymbol.paladin: SymbolDefinition(
       emoji: '🛡️',
-      label: 'Shield',
+      label: 'Paladin',
       shortDescription:
           'Reliability, assurance, and risk control — testing, oversight, governance',
       color: '#2563EB',
       styleLabel: 'Assurance Operator',
     ),
-    StyleSymbol.cog: SymbolDefinition(
+    StyleSymbol.artificer: SymbolDefinition(
       emoji: '⚙️',
-      label: 'Cog',
+      label: 'Artificer',
       shortDescription:
           'Tooling, infrastructure, and enablement — context, platforms, reusable systems',
       color: '#0D9488',
       styleLabel: 'Platform Enabler',
     ),
-    StyleSymbol.banner: SymbolDefinition(
+    StyleSymbol.commander: SymbolDefinition(
       emoji: '🚩',
-      label: 'Banner',
+      label: 'Commander',
       shortDescription:
           'Orchestration, coordination, and scaling — delegation, workflows, org adoption',
       color: '#7C3AED',
@@ -112,68 +112,68 @@ const styleLensConfig = StyleLensConfig(
   },
   dimensionWeights: {
     1: DimensionSymbolWeights(
-      sword: 0.75,
-      shield: 0.10,
-      cog: 0.15,
-      banner: 0.00,
+      warrior: 0.75,
+      paladin: 0.10,
+      artificer: 0.15,
+      commander: 0.00,
     ),
     2: DimensionSymbolWeights(
-      sword: 0.05,
-      shield: 0.10,
-      cog: 0.75,
-      banner: 0.10,
+      warrior: 0.05,
+      paladin: 0.10,
+      artificer: 0.75,
+      commander: 0.10,
     ),
     3: DimensionSymbolWeights(
-      sword: 0.15,
-      shield: 0.10,
-      cog: 0.70,
-      banner: 0.05,
+      warrior: 0.15,
+      paladin: 0.10,
+      artificer: 0.70,
+      commander: 0.05,
     ),
     4: DimensionSymbolWeights(
-      sword: 0.05,
-      shield: 0.80,
-      cog: 0.15,
-      banner: 0.00,
+      warrior: 0.05,
+      paladin: 0.80,
+      artificer: 0.15,
+      commander: 0.00,
     ),
     5: DimensionSymbolWeights(
-      sword: 0.05,
-      shield: 0.75,
-      cog: 0.10,
-      banner: 0.10,
+      warrior: 0.05,
+      paladin: 0.75,
+      artificer: 0.10,
+      commander: 0.10,
     ),
     6: DimensionSymbolWeights(
-      sword: 0.20,
-      shield: 0.05,
-      cog: 0.10,
-      banner: 0.65,
+      warrior: 0.20,
+      paladin: 0.05,
+      artificer: 0.10,
+      commander: 0.65,
     ),
     7: DimensionSymbolWeights(
-      sword: 0.05,
-      shield: 0.15,
-      cog: 0.55,
-      banner: 0.25,
+      warrior: 0.05,
+      paladin: 0.15,
+      artificer: 0.55,
+      commander: 0.25,
     ),
     8: DimensionSymbolWeights(
-      sword: 0.00,
-      shield: 0.15,
-      cog: 0.20,
-      banner: 0.65,
+      warrior: 0.00,
+      paladin: 0.15,
+      artificer: 0.20,
+      commander: 0.65,
     ),
     9: DimensionSymbolWeights(
-      sword: 0.00,
-      shield: 0.90,
-      cog: 0.10,
-      banner: 0.00,
+      warrior: 0.00,
+      paladin: 0.90,
+      artificer: 0.10,
+      commander: 0.00,
     ),
   },
   focusBySymbol: {
-    StyleSymbol.sword:
+    StyleSymbol.warrior:
         'Strengthen hands-on execution loops — clearer task specs, tighter human-agent iteration.',
-    StyleSymbol.shield:
+    StyleSymbol.paladin:
         'Invest in assurance — eval harnesses, review checkpoints, explicit guardrails.',
-    StyleSymbol.cog:
+    StyleSymbol.artificer:
         'Build reusable enablement — context systems, skills, and infrastructure others can adopt.',
-    StyleSymbol.banner:
+    StyleSymbol.commander:
         'Expand coordination — delegation patterns, workflow orchestration, team-wide integration.',
   },
   singleDominantNarrative:
