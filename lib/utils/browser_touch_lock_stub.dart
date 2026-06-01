@@ -1,0 +1,1 @@
+void setBrowserTouchLockEnabled(bool enabled) {}

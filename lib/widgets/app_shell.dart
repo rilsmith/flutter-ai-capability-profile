@@ -4,7 +4,17 @@ import 'dashboard_screen.dart';
 import 'edit_panel.dart';
 
 class AppShell extends StatefulWidget {
-  const AppShell({super.key});
+  const AppShell({
+    super.key,
+    this.forPdfExport = false,
+    this.pdfSegmentKeys,
+    this.onExportPdf,
+  });
+
+  /// Dashboard-only layout for PDF snapshot (no edit panel, desktop width).
+  final bool forPdfExport;
+  final List<GlobalKey>? pdfSegmentKeys;
+  final Future<void> Function()? onExportPdf;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -36,15 +46,18 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
-    final stackEditPanel = width <= 1300;
+    final stackEditPanel = !widget.forPdfExport && width <= 1300;
 
     final dashboard = DashboardScreen(
-      editing: _editing,
+      editing: widget.forPdfExport ? false : _editing,
+      forPdfExport: widget.forPdfExport,
+      pdfSegmentKeys: widget.pdfSegmentKeys,
       selectedDimensionId: _selectedDimensionId,
       selectedDomainId: _selectedDomainId,
       onToggleEdit: _toggleEdit,
       onSelectDimension: _selectDimension,
       onSelectDomain: _selectDomain,
+      onExportPdf: widget.onExportPdf,
     );
 
     final editPanel = EditPanel(
@@ -56,27 +69,32 @@ class _AppShellState extends State<AppShell> {
       onClose: _toggleEdit,
     );
 
-    final child = stackEditPanel
-        ? Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (_editing) ...[
-                editPanel,
-                const SizedBox(height: 24),
-              ],
-              dashboard,
-            ],
-          )
-        : Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (_editing) ...[
-                editPanel,
-                const SizedBox(width: 24),
-              ],
-              Expanded(child: dashboard),
-            ],
-          );
+    final Widget child;
+    if (widget.forPdfExport) {
+      child = dashboard;
+    } else if (stackEditPanel) {
+      child = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_editing) ...[
+            editPanel,
+            const SizedBox(height: 24),
+          ],
+          dashboard,
+        ],
+      );
+    } else {
+      child = Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_editing) ...[
+            editPanel,
+            const SizedBox(width: 24),
+          ],
+          Expanded(child: dashboard),
+        ],
+      );
+    }
 
     return Center(
       child: ConstrainedBox(

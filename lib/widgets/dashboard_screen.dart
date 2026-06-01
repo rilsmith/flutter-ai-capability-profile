@@ -23,28 +23,35 @@ class DashboardScreen extends StatelessWidget {
   const DashboardScreen({
     super.key,
     required this.editing,
+    this.forPdfExport = false,
+    this.pdfSegmentKeys,
     required this.selectedDimensionId,
     required this.selectedDomainId,
     required this.onToggleEdit,
     required this.onSelectDimension,
     required this.onSelectDomain,
+    this.onExportPdf,
   });
 
   final bool editing;
+  final bool forPdfExport;
+  final List<GlobalKey>? pdfSegmentKeys;
   final int? selectedDimensionId;
   final int? selectedDomainId;
   final VoidCallback onToggleEdit;
   final ValueChanged<int?> onSelectDimension;
   final ValueChanged<int?> onSelectDomain;
+  final Future<void> Function()? onExportPdf;
 
   @override
   Widget build(BuildContext context) {
     final notifier = context.watch<DashboardNotifier>();
     final data = notifier.data;
-    final average = computeAverage(data.dimensions);
-    final distribution = computeDistribution(data.dimensions, data.tiers);
+    final dimensions = notifier.effectiveDimensions;
+    final average = computeAverage(dimensions);
+    final distribution = computeDistribution(dimensions, data.tiers);
     final insights = computeProfileInsights(
-      data.dimensions,
+      dimensions,
       data.applicationDomains,
       data.tiers,
     );
@@ -58,7 +65,7 @@ class DashboardScreen extends StatelessWidget {
     }
 
     final capabilityProfile = CapabilityProfileCard(
-      dimensions: data.dimensions,
+      dimensions: dimensions,
       average: average,
       maxScore: data.maxScore,
       distribution: distribution,
@@ -68,17 +75,19 @@ class DashboardScreen extends StatelessWidget {
       onSelectDimension: handleSelectDimension,
     );
     final styleLens = computeStyleLens(
-      data.dimensions,
+      dimensions,
       tiers: data.tiers,
       maxScore: data.maxScore,
       selectedDimensionId: selectedDimensionId,
     );
     final chart = InteractiveRadarChart(
-      dimensions: data.dimensions,
+      dimensions: dimensions,
       maxScore: data.maxScore,
       editing: editing,
       selectedDimensionId: selectedDimensionId,
       onSelectDimension: handleSelectDimension,
+      onDragPreview: notifier.setDragPreview,
+      onDragCancel: notifier.clearDragPreview,
       onUpdateScore: (id, score) =>
           notifier.patchDimension(id, score: score),
     );
@@ -104,8 +113,9 @@ class DashboardScreen extends StatelessWidget {
     final capabilityHowToRead = HowToReadCard(text: data.howToRead);
     final intro = IntroCard(text: data.intro);
     final matrix = CapabilityApplicationMatrix(
-      dimensions: data.dimensions,
+      dimensions: dimensions,
       domains: data.applicationDomains,
+      maxScore: data.maxScore,
       selectedDimensionId: selectedDimensionId,
       selectedDomainId: selectedDomainId,
       onSelectDimension: handleSelectDimension,
@@ -113,6 +123,21 @@ class DashboardScreen extends StatelessWidget {
       onToggleCapabilityLink: notifier.toggleDomainCapability,
     );
     final profileInsights = ProfileInsightsCard(insights: insights);
+
+    Widget pdfSegment(int index, Widget child) {
+      final keys = pdfSegmentKeys;
+      if (!forPdfExport || keys == null || index >= keys.length) {
+        return child;
+      }
+      // Opaque background — transparent pixels become black in toImage() on web.
+      return RepaintBoundary(
+        key: keys[index],
+        child: ColoredBox(
+          color: Colors.white,
+          child: child,
+        ),
+      );
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -126,30 +151,38 @@ class DashboardScreen extends StatelessWidget {
         final columnWidth = sideBySide ? (availableInnerWidth - 24) * 0.6 : availableInnerWidth;
         final effectiveChartSize = math.min(chartHeight, columnWidth) * 0.94;
 
-        final chartSection = sideBySide
-            ? SizedBox(
-                height: chartHeight,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: Center(
-                        child: SizedBox(
-                          width: effectiveChartSize,
-                          height: effectiveChartSize,
-                          child: chart,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 24),
-                    Expanded(
-                      flex: 2,
-                      child: SingleChildScrollView(child: styleLensPanel),
-                    ),
-                  ],
+        final chartRow = Row(
+          crossAxisAlignment:
+              forPdfExport ? CrossAxisAlignment.start : CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              flex: 3,
+              child: Center(
+                child: SizedBox(
+                  width: effectiveChartSize,
+                  height: effectiveChartSize,
+                  child: chart,
                 ),
-              )
+              ),
+            ),
+            const SizedBox(width: 24),
+            Expanded(
+              flex: 2,
+              child: forPdfExport
+                  ? styleLensPanel
+                  : SingleChildScrollView(child: styleLensPanel),
+            ),
+          ],
+        );
+
+        final chartSection = sideBySide
+            ? (forPdfExport
+                ? chartRow
+                : SizedBox(
+                    height: chartHeight,
+                    width: double.infinity,
+                    child: chartRow,
+                  ))
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -176,35 +209,61 @@ class DashboardScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Header(
-                title: data.title,
-                subtitle: data.subtitle,
-                editing: editing,
-                onToggleEdit: onToggleEdit,
-                onExport: notifier.exportJson,
-                onImport: notifier.importJson,
-                onReset: notifier.resetToDefaults,
+              pdfSegment(
+                0,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Header(
+                      title: data.title,
+                      subtitle: data.subtitle,
+                      editing: editing,
+                      showActions: !forPdfExport,
+                      onToggleEdit: onToggleEdit,
+                      onExport: notifier.exportJson,
+                      onExportPdf: onExportPdf ?? () async {},
+                      onImport: notifier.importJson,
+                      onReset: notifier.resetToDefaults,
+                    ),
+                    const SizedBox(height: 28),
+                    intro,
+                    if (data.intro.trim().isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                    ],
+                    capabilityHowToRead,
+                  ],
+                ),
               ),
-              const SizedBox(height: 28),
-              intro,
-              if (data.intro.trim().isNotEmpty) ...[
-                const SizedBox(height: 20),
-              ],
-              capabilityHowToRead,
               const SizedBox(height: 20),
-              chartSection,
+              pdfSegment(1, chartSection),
               const SizedBox(height: 20),
-              capabilityProfile,
+              pdfSegment(
+                2,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    capabilityProfile,
+                    const SizedBox(height: 20),
+                    applicationCoverageHowToRead,
+                    const SizedBox(height: 20),
+                    applicationCoverage,
+                  ],
+                ),
+              ),
               const SizedBox(height: 20),
-              applicationCoverageHowToRead,
-              const SizedBox(height: 20),
-              applicationCoverage,
-              const SizedBox(height: 20),
-              applicationMatrixHowToRead,
-              const SizedBox(height: 20),
-              matrix,
-              const SizedBox(height: 20),
-              profileInsights,
+              pdfSegment(
+                3,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    applicationMatrixHowToRead,
+                    const SizedBox(height: 20),
+                    matrix,
+                    const SizedBox(height: 20),
+                    profileInsights,
+                  ],
+                ),
+              ),
             ],
           ),
         );
