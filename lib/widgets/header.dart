@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../theme/dashboard_theme.dart';
@@ -13,7 +11,6 @@ class Header extends StatelessWidget {
     this.showActions = true,
     required this.onToggleEdit,
     required this.onExport,
-    required this.onExportPdf,
     required this.onImport,
     required this.onReset,
   });
@@ -24,7 +21,6 @@ class Header extends StatelessWidget {
   final bool showActions;
   final VoidCallback onToggleEdit;
   final VoidCallback onExport;
-  final Future<void> Function() onExportPdf;
   final VoidCallback onImport;
   final VoidCallback onReset;
 
@@ -60,7 +56,6 @@ class Header extends StatelessWidget {
       onSelected: (value) {
         if (value == 'edit') onToggleEdit();
         if (value == 'export') onExport();
-        if (value == 'exportPdf') unawaited(onExportPdf());
         if (value == 'import') onImport();
         if (value == 'reset') onReset();
       },
@@ -93,16 +88,6 @@ class Header extends StatelessWidget {
               Icon(Icons.download, size: 18, color: DashboardTheme.body),
               const SizedBox(width: 12),
               const Text('Export JSON'),
-            ],
-          ),
-        ),
-        PopupMenuItem(
-          value: 'exportPdf',
-          child: Row(
-            children: [
-              Icon(Icons.picture_as_pdf, size: 18, color: DashboardTheme.body),
-              const SizedBox(width: 12),
-              const Text('Export PDF'),
             ],
           ),
         ),

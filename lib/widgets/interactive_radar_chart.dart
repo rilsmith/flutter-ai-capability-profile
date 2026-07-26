@@ -1,13 +1,11 @@
 import 'dart:math' as math;
 
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../models/dimension.dart';
+import '../models/individual_profile.dart';
 import '../theme/dashboard_theme.dart';
-import '../utils/browser_touch_lock.dart';
 import '../utils/compute.dart';
-import 'chart_scroll_lock.dart';
 
 const _viewBox = 1100.0;
 const _cx = 550.0;
@@ -25,9 +23,11 @@ class InteractiveRadarChart extends StatefulWidget {
     this.editing = false,
     this.selectedDimensionId,
     this.onSelectDimension,
-    this.onDragPreview,
-    this.onDragCancel,
     this.onUpdateScore,
+    this.teamMembers,
+    this.teamMins,
+    this.teamMaxs,
+    this.highlightedMemberIndex,
   });
 
   final List<Dimension> dimensions;
@@ -35,9 +35,13 @@ class InteractiveRadarChart extends StatefulWidget {
   final bool editing;
   final int? selectedDimensionId;
   final ValueChanged<int>? onSelectDimension;
-  final void Function(int id, double score)? onDragPreview;
-  final VoidCallback? onDragCancel;
   final void Function(int id, double score)? onUpdateScore;
+  final List<IndividualProfile>? teamMembers;
+  final List<double>? teamMins;
+  final List<double>? teamMaxs;
+  final int? highlightedMemberIndex;
+
+  bool get isTeamView => teamMembers != null && teamMembers!.length > 1;
 
   @override
   State<InteractiveRadarChart> createState() => _InteractiveRadarChartState();
@@ -46,30 +50,32 @@ class InteractiveRadarChart extends StatefulWidget {
 class _InteractiveRadarChartState extends State<InteractiveRadarChart> {
   int? _draggingId;
   bool _dragMoved = false;
-  ScrollHoldController? _scrollHold;
-  ChartScrollLock? _scrollLockHost;
 
-  bool get _canDrag => widget.onUpdateScore != null;
+  bool get _canDrag => widget.onUpdateScore != null && !widget.isTeamView;
   bool get _canSelect => widget.onSelectDimension != null;
 
   double get _angleStep => 360 / widget.dimensions.length;
 
-  Offset _pointForIndex(int index, List<Dimension> dimensions) {
-    final dimension = dimensions[index];
+  Offset _pointForIndex(int index, double score) {
     final polar = polarToXY(
       _cx,
       _cy,
-      (dimension.score / widget.maxScore) * _maxRadius,
+      (score / widget.maxScore) * _maxRadius,
       index * _angleStep,
     );
     return Offset(polar.x, polar.y);
   }
 
-  double _scoreAtViewBox(int dimensionId, Offset viewBox) {
-    final index = widget.dimensions.indexWhere((d) => d.id == dimensionId);
-    if (index == -1) return 0;
+  Offset _pointForDimension(int index) {
+    final dimension = widget.dimensions[index];
+    return _pointForIndex(index, dimension.score);
+  }
 
-    return scoreFromAxisPoint(
+  void _applyScore(int dimensionId, Offset viewBox) {
+    final index = widget.dimensions.indexWhere((d) => d.id == dimensionId);
+    if (index == -1) return;
+
+    final score = scoreFromAxisPoint(
       viewBox.dx,
       viewBox.dy,
       _cx,
@@ -78,20 +84,7 @@ class _InteractiveRadarChartState extends State<InteractiveRadarChart> {
       _maxRadius,
       widget.maxScore,
     );
-  }
-
-  void _commitScore(int dimensionId, double score) {
     widget.onUpdateScore!(dimensionId, score);
-  }
-
-  int? _dotAtPosition(Offset viewBox, List<Dimension> dimensions) {
-    for (var i = 0; i < dimensions.length; i++) {
-      final center = _pointForIndex(i, dimensions);
-      if ((viewBox - center).distance <= _dotHitRadius) {
-        return dimensions[i].id;
-      }
-    }
-    return null;
   }
 
   void _handleAxisTap(Offset viewBox) {
@@ -112,93 +105,40 @@ class _InteractiveRadarChartState extends State<InteractiveRadarChart> {
     }
 
     final dimension = widget.dimensions[index];
-    _commitScore(dimension.id, _scoreAtViewBox(dimension.id, viewBox));
+    _applyScore(dimension.id, viewBox);
     if (_canSelect) {
       widget.onSelectDimension!(dimension.id);
     }
   }
 
-  void _releaseScrollHold() {
-    _scrollHold?.cancel();
-    _scrollHold = null;
-  }
-
-  void _acquireScrollHold() {
-    _scrollHold?.cancel();
-    final position = Scrollable.maybeOf(context)?.position;
-    if (position != null) {
-      _scrollHold = position.hold(() {});
-    }
-  }
-
-  void _setDragScrollLocked(bool locked) {
-    _scrollLockHost?.setLocked(locked);
-    setBrowserTouchLockEnabled(locked);
-    if (locked) {
-      _acquireScrollHold();
-    } else {
-      _releaseScrollHold();
-    }
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _scrollLockHost = ChartScrollLock.maybeOf(context);
-  }
-
   void _startDotDrag(int dimensionId) {
-    final dimension = widget.dimensions.firstWhere((d) => d.id == dimensionId);
     _dragMoved = false;
-    _setDragScrollLocked(true);
     setState(() => _draggingId = dimensionId);
-    widget.onDragPreview?.call(dimensionId, dimension.score);
+    if (_canSelect && widget.editing) {
+      widget.onSelectDimension!(dimensionId);
+    }
   }
 
-  void _updateDragPreview(Offset viewBox) {
+  void _moveDotDrag(Offset viewBox) {
     if (_draggingId == null) return;
-
     _dragMoved = true;
-    final score = _scoreAtViewBox(_draggingId!, viewBox);
-    widget.onDragPreview?.call(_draggingId!, score);
+    _applyScore(_draggingId!, viewBox);
   }
 
   void _endDotDrag(int dimensionId, Offset viewBox) {
     if (_draggingId != dimensionId) return;
 
-    final score = _dragMoved
-        ? widget.dimensions
-            .firstWhere((d) => d.id == dimensionId)
-            .score
-        : _scoreAtViewBox(dimensionId, viewBox);
-    _commitScore(dimensionId, score);
+    if (!_dragMoved) {
+      _applyScore(dimensionId, viewBox);
+    }
     if (_canSelect && !_dragMoved) {
       widget.onSelectDimension!(dimensionId);
     }
     setState(() => _draggingId = null);
-    _setDragScrollLocked(false);
-  }
-
-  void _cancelDotDrag() {
-    if (_draggingId == null) return;
-
-    widget.onDragCancel?.call();
-    setState(() => _draggingId = null);
-    _setDragScrollLocked(false);
-  }
-
-  @override
-  void dispose() {
-    _scrollLockHost?.setLocked(false);
-    setBrowserTouchLockEnabled(false);
-    _releaseScrollHold();
-    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final displayDimensions = widget.dimensions;
-
     return AspectRatio(
       aspectRatio: 1,
       child: FittedBox(
@@ -206,46 +146,37 @@ class _InteractiveRadarChartState extends State<InteractiveRadarChart> {
         child: SizedBox(
           width: _viewBox,
           height: _viewBox,
-          child: RawGestureDetector(
+          child: Listener(
             behavior: HitTestBehavior.translucent,
-            gestures: _canDrag
-                ? <Type, GestureRecognizerFactory>{
-                    _DotPanGestureRecognizer:
-                        GestureRecognizerFactoryWithHandlers<
-                            _DotPanGestureRecognizer>(
-                      () => _DotPanGestureRecognizer(debugOwner: this),
-                      (_DotPanGestureRecognizer recognizer) {
-                        recognizer.hitTestDot = (local) => _dotAtPosition(
-                              local,
-                              widget.dimensions,
-                            );
-                        recognizer.onDotPanStart = _startDotDrag;
-                        recognizer.onUpdate = (details) {
-                          _updateDragPreview(details.localPosition);
-                        };
-                        recognizer.onEnd = (details) {
-                          if (_draggingId != null) {
-                            _endDotDrag(
-                              _draggingId!,
-                              details.localPosition,
-                            );
-                          }
-                        };
-                        recognizer.onCancel = _cancelDotDrag;
-                      },
-                    ),
-                  }
-                : const <Type, GestureRecognizerFactory>{},
+            onPointerMove: (event) {
+              if (_draggingId != null) {
+                _moveDotDrag(event.localPosition);
+              }
+            },
+            onPointerUp: (event) {
+              if (_draggingId != null) {
+                _endDotDrag(_draggingId!, event.localPosition);
+              }
+            },
+            onPointerCancel: (event) {
+              if (_draggingId != null) {
+                setState(() => _draggingId = null);
+              }
+            },
             child: Stack(
               clipBehavior: Clip.none,
               children: [
                 CustomPaint(
                   size: const Size(_viewBox, _viewBox),
                   painter: _RadarVisualPainter(
-                    dimensions: displayDimensions,
+                    dimensions: widget.dimensions,
                     maxScore: widget.maxScore,
                     selectedDimensionId: widget.selectedDimensionId,
                     draggingId: _draggingId,
+                    teamMembers: widget.teamMembers,
+                    teamMins: widget.teamMins,
+                    teamMaxs: widget.teamMaxs,
+                    highlightedMemberIndex: widget.highlightedMemberIndex,
                   ),
                 ),
                 if (_canDrag)
@@ -259,8 +190,6 @@ class _InteractiveRadarChartState extends State<InteractiveRadarChart> {
                       child: GestureDetector(
                         behavior: HitTestBehavior.translucent,
                         onTapUp: (details) {
-                          if (_draggingId != null) return;
-
                           final viewBox = Offset(
                             _cx - _maxRadius + details.localPosition.dx,
                             _cy - _maxRadius + details.localPosition.dy,
@@ -272,11 +201,13 @@ class _InteractiveRadarChartState extends State<InteractiveRadarChart> {
                     ),
                   ),
                 if (_canDrag)
-                  for (var i = 0; i < displayDimensions.length; i++)
+                  for (var i = 0; i < widget.dimensions.length; i++)
                     _DotHitTarget(
-                      key: ValueKey(displayDimensions[i].id),
-                      center: _pointForIndex(i, displayDimensions),
-                      dragging: _draggingId == displayDimensions[i].id,
+                      key: ValueKey(widget.dimensions[i].id),
+                      center: _pointForDimension(i),
+                      dragging: _draggingId == widget.dimensions[i].id,
+                      onDragStart: () =>
+                          _startDotDrag(widget.dimensions[i].id),
                     ),
                 for (var i = 0; i < widget.dimensions.length; i++)
                   _DimensionLabel(
@@ -300,35 +231,17 @@ class _InteractiveRadarChartState extends State<InteractiveRadarChart> {
   }
 }
 
-/// Pan recognizer that only competes with scroll when the pointer down is on a dot.
-class _DotPanGestureRecognizer extends PanGestureRecognizer {
-  _DotPanGestureRecognizer({super.debugOwner});
-
-  int? Function(Offset localPosition)? hitTestDot;
-  void Function(int dimensionId)? onDotPanStart;
-
-  @override
-  void addAllowedPointer(PointerDownEvent event) {
-    if (hitTestDot == null) return;
-
-    final dotId = hitTestDot!(event.localPosition);
-    if (dotId == null) return;
-
-    onDotPanStart?.call(dotId);
-    super.addAllowedPointer(event);
-    resolve(GestureDisposition.accepted);
-  }
-}
-
 class _DotHitTarget extends StatelessWidget {
   const _DotHitTarget({
     super.key,
     required this.center,
     required this.dragging,
+    required this.onDragStart,
   });
 
   final Offset center;
   final bool dragging;
+  final VoidCallback onDragStart;
 
   @override
   Widget build(BuildContext context) {
@@ -340,7 +253,11 @@ class _DotHitTarget extends StatelessWidget {
       height: size,
       child: MouseRegion(
         cursor: dragging ? SystemMouseCursors.grabbing : SystemMouseCursors.grab,
-        child: const SizedBox.expand(),
+        child: Listener(
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: (_) => onDragStart(),
+          child: const SizedBox.expand(),
+        ),
       ),
     );
   }
@@ -453,25 +370,51 @@ class _RadarVisualPainter extends CustomPainter {
     required this.maxScore,
     required this.selectedDimensionId,
     required this.draggingId,
+    this.teamMembers,
+    this.teamMins,
+    this.teamMaxs,
+    this.highlightedMemberIndex,
   });
 
   final List<Dimension> dimensions;
   final int maxScore;
   final int? selectedDimensionId;
   final int? draggingId;
+  final List<IndividualProfile>? teamMembers;
+  final List<double>? teamMins;
+  final List<double>? teamMaxs;
+  final int? highlightedMemberIndex;
 
   @override
   void paint(Canvas canvas, Size size) {
     final n = dimensions.length;
     final angleStep = 360 / n;
     final gridPaint = Paint()
+      ..color = const Color(0xFF9CA3AF)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    final axisPaint = Paint()
       ..color = const Color(0xFFD1D5DB)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
 
     for (var level = 1; level <= maxScore; level++) {
       final r = (level / maxScore) * _maxRadius;
-      _drawDashedCircle(canvas, Offset(_cx, _cy), r, gridPaint);
+      canvas.drawCircle(Offset(_cx, _cy), r, gridPaint);
+    }
+
+    for (var i = maxScore - 1; i >= 1; i--) {
+      final r = ((i + 1) / maxScore) * _maxRadius;
+      canvas.drawCircle(
+        Offset(_cx, _cy),
+        r,
+        Paint()
+          ..color = i.isOdd
+              ? const Color(0x08000000)
+              : const Color(0x00000000)
+          ..style = PaintingStyle.fill,
+      );
     }
 
     for (var i = 0; i < n; i++) {
@@ -480,7 +423,7 @@ class _RadarVisualPainter extends CustomPainter {
         canvas,
         Offset(_cx, _cy),
         Offset(end.x, end.y),
-        gridPaint,
+        axisPaint,
       );
     }
 
@@ -500,12 +443,82 @@ class _RadarVisualPainter extends CustomPainter {
       );
     }
 
+    _drawTeamRange(canvas, n, angleStep);
+    _drawDataPolygon(canvas, n, angleStep);
+    _drawIndividualDots(canvas, n, angleStep);
+    _drawDimensionDots(canvas, n, angleStep);
+  }
+
+  void _drawTeamRange(Canvas canvas, int n, double angleStep) {
+    if (teamMins == null || teamMaxs == null) return;
+    if (teamMins!.length < n || teamMaxs!.length < n) return;
+
+    final minPoints = <Offset>[];
+    final maxPoints = <Offset>[];
+
+    for (var i = 0; i < n; i++) {
+      final minP = polarToXY(
+        _cx, _cy,
+        (teamMins![i] / maxScore) * _maxRadius,
+        i * angleStep,
+      );
+      final maxP = polarToXY(
+        _cx, _cy,
+        (teamMaxs![i] / maxScore) * _maxRadius,
+        i * angleStep,
+      );
+      minPoints.add(Offset(minP.x, minP.y));
+      maxPoints.add(Offset(maxP.x, maxP.y));
+    }
+
+    final fillPaint = Paint()
+      ..color = const Color(0x122563EB)
+      ..style = PaintingStyle.fill;
+
+    if (minPoints.length >= 3) {
+      final path = Path()..moveTo(minPoints.first.dx, minPoints.first.dy);
+      for (final point in minPoints.skip(1)) {
+        path.lineTo(point.dx, point.dy);
+      }
+      path.close();
+      canvas.drawPath(path, fillPaint);
+    }
+
+    if (maxPoints.length >= 3) {
+      final path = Path()..moveTo(maxPoints.first.dx, maxPoints.first.dy);
+      for (final point in maxPoints.skip(1)) {
+        path.lineTo(point.dx, point.dy);
+      }
+      path.close();
+      canvas.drawPath(path, fillPaint);
+
+      final borderPaint = Paint()
+        ..color = const Color(0x402563EB)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1;
+      canvas.drawPath(path, borderPaint);
+    }
+
+    if (minPoints.length >= 3) {
+      final borderPaint = Paint()
+        ..color = const Color(0x402563EB)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1;
+      final path = Path()..moveTo(minPoints.first.dx, minPoints.first.dy);
+      for (final point in minPoints.skip(1)) {
+        path.lineTo(point.dx, point.dy);
+      }
+      path.close();
+      canvas.drawPath(path, borderPaint);
+    }
+  }
+
+  void _drawDataPolygon(Canvas canvas, int n, double angleStep) {
     final points = <Offset>[];
     for (var i = 0; i < n; i++) {
       final dimension = dimensions[i];
       final point = polarToXY(
-        _cx,
-        _cy,
+        _cx, _cy,
         (dimension.score / maxScore) * _maxRadius,
         i * angleStep,
       );
@@ -533,10 +546,75 @@ class _RadarVisualPainter extends CustomPainter {
           ..strokeJoin = StrokeJoin.round,
       );
     }
+  }
 
+  void _drawIndividualDots(Canvas canvas, int n, double angleStep) {
+    if (teamMembers == null) return;
+    final memberColors = [
+      const Color(0xFF7C3AED),
+      const Color(0xFFDB2777),
+      const Color(0xFF16A34A),
+      const Color(0xFFEA580C),
+      const Color(0xFF0D9488),
+      const Color(0xFF4F46E5),
+      const Color(0xFFDC2626),
+      const Color(0xFFCA8A04),
+      const Color(0xFF2563EB),
+      const Color(0xFF9333EA),
+    ];
+
+    for (var mi = 0; mi < teamMembers!.length; mi++) {
+      final member = teamMembers![mi];
+      final color = memberColors[mi % memberColors.length];
+      if (member.scores.length < n) continue;
+
+      final isHighlighted = highlightedMemberIndex == mi;
+
+      for (var i = 0; i < n; i++) {
+        final point = polarToXY(
+          _cx, _cy,
+          (member.scores[i] / maxScore) * _maxRadius,
+          i * angleStep,
+        );
+        final offset = Offset(point.x, point.y);
+
+        if (isHighlighted) {
+          canvas.drawCircle(
+            offset,
+            6,
+            Paint()
+              ..color = color.withValues(alpha: 0.35)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 2.5,
+          );
+        }
+
+        canvas.drawCircle(
+          offset,
+          isHighlighted ? 5 : 3,
+          Paint()..color = color.withValues(alpha: isHighlighted ? 1.0 : 0.7),
+        );
+        canvas.drawCircle(
+          offset,
+          isHighlighted ? 5 : 3,
+          Paint()
+            ..color = Colors.white
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.5,
+        );
+      }
+    }
+  }
+
+  void _drawDimensionDots(Canvas canvas, int n, double angleStep) {
     for (var i = 0; i < n; i++) {
       final dimension = dimensions[i];
-      final offset = points[i];
+      final point = polarToXY(
+        _cx, _cy,
+        (dimension.score / maxScore) * _maxRadius,
+        i * angleStep,
+      );
+      final offset = Offset(point.x, point.y);
       final isSelected = selectedDimensionId == dimension.id;
       final isDragging = draggingId == dimension.id;
       final color = DashboardTheme.parseHex(dimension.color);
@@ -568,22 +646,6 @@ class _RadarVisualPainter extends CustomPainter {
     }
   }
 
-  void _drawDashedCircle(Canvas canvas, Offset center, double radius, Paint paint) {
-    const dash = 4.0;
-    const gap = 4.0;
-    final segment = dash + gap;
-    final count = ((2 * math.pi * radius) / segment).ceil();
-    for (var i = 0; i < count; i++) {
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        i * segment / radius,
-        dash / radius,
-        false,
-        paint,
-      );
-    }
-  }
-
   void _drawDashedLine(Canvas canvas, Offset start, Offset end, Paint paint) {
     const dash = 4.0;
     const gap = 4.0;
@@ -607,6 +669,10 @@ class _RadarVisualPainter extends CustomPainter {
     return oldDelegate.dimensions != dimensions ||
         oldDelegate.maxScore != maxScore ||
         oldDelegate.selectedDimensionId != selectedDimensionId ||
-        oldDelegate.draggingId != draggingId;
+        oldDelegate.draggingId != draggingId ||
+        oldDelegate.teamMembers != teamMembers ||
+        oldDelegate.teamMins != teamMins ||
+        oldDelegate.teamMaxs != teamMaxs ||
+        oldDelegate.highlightedMemberIndex != highlightedMemberIndex;
   }
 }

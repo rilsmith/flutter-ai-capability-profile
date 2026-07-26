@@ -108,7 +108,7 @@ void main() {
       );
 
       expect(analysis.selectedDimensionHint, isNotNull);
-      expect(analysis.selectedDimensionHint, contains('Human-Agent Interaction'));
+      expect(analysis.selectedDimensionHint, contains('Prompt & Interaction Design'));
       expect(analysis.selectedDimensionHint, contains('Warrior'));
       expect(analysis.selectedDimensionHint, contains('75%'));
     });

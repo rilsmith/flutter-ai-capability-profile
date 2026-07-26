@@ -152,7 +152,7 @@ List<String> computeProfileInsights(
 
   Dimension? reliability;
   for (final dimension in dimensions) {
-    if (dimension.name.contains('Reliability')) {
+    if (dimension.name.contains('Evaluation')) {
       reliability = dimension;
       break;
     }
@@ -165,7 +165,7 @@ List<String> computeProfileInsights(
         .toList();
     if (reliabilityDomains.length == 1) {
       insights.add(
-        'Reliability Engineering shows up only in ${reliabilityDomains.first} — consider whether runtime or evaluation contexts apply.',
+        'Evaluation & Verification shows up only in ${reliabilityDomains.first} — consider whether testing, eval, or quality contexts apply.',
       );
     }
   }
