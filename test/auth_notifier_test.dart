@@ -59,5 +59,59 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('gh_token'), isNull);
     });
+
+    group('selectPrimaryEmail', () {
+      test('prefers verified primary email', () {
+        final emails = [
+          {'email': 'unverified@example.com', 'primary': false, 'verified': false},
+          {'email': 'verified@example.com', 'primary': false, 'verified': true},
+          {'email': 'primary@example.com', 'primary': true, 'verified': true},
+        ];
+
+        final result = AuthNotifier.selectPrimaryEmail(emails);
+
+        expect(result, isNotNull);
+        expect(result!['email'], 'primary@example.com');
+      });
+
+      test('falls back to any verified email when no verified primary', () {
+        final emails = [
+          {'email': 'unverified@example.com', 'primary': true, 'verified': false},
+          {'email': 'verified@example.com', 'primary': false, 'verified': true},
+        ];
+
+        final result = AuthNotifier.selectPrimaryEmail(emails);
+
+        expect(result, isNotNull);
+        expect(result!['email'], 'verified@example.com');
+      });
+
+      test('rejects unverified primary email by default', () {
+        final emails = [
+          {'email': 'primary@example.com', 'primary': true, 'verified': false},
+        ];
+
+        final result = AuthNotifier.selectPrimaryEmail(
+          emails,
+          allowUnverified: false,
+        );
+
+        expect(result, isNull);
+      });
+
+      test('accepts unverified primary email when allowUnverified is true', () {
+        final emails = [
+          {'email': 'primary@example.com', 'primary': true, 'verified': false},
+        ];
+
+        final result = AuthNotifier.selectPrimaryEmail(
+          emails,
+          allowUnverified: true,
+        );
+
+        expect(result, isNotNull);
+        expect(result!['email'], 'primary@example.com');
+      });
+    });
   });
 }

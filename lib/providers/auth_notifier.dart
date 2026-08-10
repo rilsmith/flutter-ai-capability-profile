@@ -45,6 +45,10 @@ class AuthNotifier extends ChangeNotifier {
     'REDIRECT_URI',
     defaultValue: '',
   );
+  static const _allowUnverifiedTestEmail = bool.fromEnvironment(
+    'ALLOW_UNVERIFIED_TEST_EMAIL',
+    defaultValue: false,
+  );
   static const _tokenKey = 'gh_token';
   static const _stateKey = 'gh_oauth_state';
 
@@ -61,6 +65,44 @@ class AuthNotifier extends ChangeNotifier {
   String? get error => _error;
   String? get token => _token;
   bool get isOAuthConfigured => _clientId.isNotEmpty && _redirectUri.isNotEmpty;
+
+  /// Select the primary email from GitHub's /user/emails response.
+  ///
+  /// Normally requires a verified primary email. When the compile-time Dart
+  /// define [ALLOW_UNVERIFIED_TEST_EMAIL] is `true` (or [allowUnverified]
+  /// is explicitly set), an unverified primary email is accepted as a
+  /// local-dev escape hatch, matching the backend behavior controlled by the
+  /// same-named environment variable.
+  static Map<String, dynamic>? selectPrimaryEmail(
+    List<dynamic> emails, {
+    bool? allowUnverified,
+  }) {
+    final allowUnverifiedTestEmail =
+        allowUnverified ?? _allowUnverifiedTestEmail;
+    final typedEmails = emails.cast<Map<String, dynamic>>();
+
+    for (final e in typedEmails) {
+      if (e['primary'] == true && e['verified'] == true) {
+        return e;
+      }
+    }
+
+    for (final e in typedEmails) {
+      if (e['verified'] == true) {
+        return e;
+      }
+    }
+
+    if (allowUnverifiedTestEmail) {
+      for (final e in typedEmails) {
+        if (e['primary'] == true) {
+          return e;
+        }
+      }
+    }
+
+    return null;
+  }
 
   AuthNotifier() {
     _init().catchError((Object e) {
@@ -188,10 +230,7 @@ class AuthNotifier extends ChangeNotifier {
         headers: headers,
       );
       final emails = jsonDecode(emailResp.body) as List<dynamic>;
-      final primary = emails.firstWhere(
-        (e) => e['primary'] == true && e['verified'] == true,
-        orElse: () => null,
-      );
+      final primary = selectPrimaryEmail(emails);
 
       if (primary == null) {
         throw Exception('No verified primary email found for this GitHub account');
