@@ -361,6 +361,102 @@ def test_post_submission_rejects_non_json_content_type(client, monkeypatch):
     assert resp.status_code == 400
 
 
+def test_post_submission_rejects_missing_dimensions(client, monkeypatch):
+    _set_auth(monkeypatch)
+    payload = _sample_payload()
+    del payload["dimensions"]
+    resp = client.post(
+        "/api/submissions",
+        json=payload,
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 400
+    assert "dimensions" in resp.json["error"].lower()
+
+
+def test_post_submission_rejects_empty_dimensions(client, monkeypatch):
+    _set_auth(monkeypatch)
+    payload = _sample_payload(dimensions=[])
+    resp = client.post(
+        "/api/submissions",
+        json=payload,
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 400
+    assert "dimensions" in resp.json["error"].lower()
+
+
+def test_post_submission_rejects_missing_application_domains(client, monkeypatch):
+    _set_auth(monkeypatch)
+    payload = _sample_payload()
+    del payload["applicationDomains"]
+    resp = client.post(
+        "/api/submissions",
+        json=payload,
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 400
+    assert "applicationdomains" in resp.json["error"].lower()
+
+
+def test_post_submission_rejects_empty_application_domains(client, monkeypatch):
+    _set_auth(monkeypatch)
+    payload = _sample_payload(applicationDomains=[])
+    resp = client.post(
+        "/api/submissions",
+        json=payload,
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 400
+    assert "applicationdomains" in resp.json["error"].lower()
+
+
+def test_post_submission_closes_db_connection(client, monkeypatch):
+    """Connection leak fix: the endpoint must close the psycopg2 connection."""
+    _set_auth(monkeypatch)
+    calls = {"close": 0}
+
+    class _FakeConn:
+        def __init__(self):
+            self._committed = False
+
+        def cursor(self):
+            class _Cur:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *args):
+                    return False
+
+                def execute(self, *args, **kwargs):
+                    pass
+
+                def fetchone(self):
+                    from datetime import datetime, timezone
+
+                    return (
+                        "550e8400-e29b-41d4-a716-446655440000",
+                        datetime.now(timezone.utc),
+                    )
+
+            return _Cur()
+
+        def commit(self):
+            self._committed = True
+
+        def close(self):
+            calls["close"] += 1
+
+    monkeypatch.setattr(server_module, "_get_db_conn", lambda: _FakeConn())
+    resp = client.post(
+        "/api/submissions",
+        json=_sample_payload(),
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 201
+    assert calls["close"] == 1
+
+
 def test_get_submissions_me_requires_auth(client):
     resp = client.get("/api/submissions/me")
     assert resp.status_code == 401

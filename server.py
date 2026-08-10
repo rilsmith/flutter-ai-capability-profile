@@ -381,6 +381,18 @@ def _json_payload() -> dict:
     return body
 
 
+def _validate_dashboard_payload(payload: dict) -> None:
+    """Validate required DashboardData fields before persistence."""
+    dimensions = payload.get("dimensions")
+    if not isinstance(dimensions, list) or len(dimensions) == 0:
+        raise ValidationError("Payload must contain a non-empty 'dimensions' array")
+    application_domains = payload.get("applicationDomains")
+    if not isinstance(application_domains, list) or len(application_domains) == 0:
+        raise ValidationError(
+            "Payload must contain a non-empty 'applicationDomains' array"
+        )
+
+
 def _row_to_submission(row: tuple) -> dict:
     """Convert a submissions table row into a JSON-serializable dict."""
     payload = row[7]
@@ -400,7 +412,8 @@ def _row_to_submission(row: tuple) -> dict:
 
 def _latest_team_submissions(manager_uid: str) -> list:
     """Return the latest submission per user for a given manager."""
-    with _get_db_conn() as conn:
+    conn = _get_db_conn()
+    try:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -414,6 +427,8 @@ def _latest_team_submissions(manager_uid: str) -> list:
                 (manager_uid,),
             )
             return cur.fetchall()
+    finally:
+        conn.close()
 
 
 def _compute_aggregate(rows: list) -> dict:
@@ -527,8 +542,10 @@ def create_submission() -> Any:
     identity = _get_identity()
     manager = _get_manager(identity["uid"])
     payload = _json_payload()
+    _validate_dashboard_payload(payload)
 
-    with _get_db_conn() as conn:
+    conn = _get_db_conn()
+    try:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -549,6 +566,8 @@ def create_submission() -> Any:
             )
             row = cur.fetchone()
             conn.commit()
+    finally:
+        conn.close()
 
     return jsonify({"id": str(row[0]), "submitted_at": row[1].isoformat()}), 201
 
@@ -561,7 +580,8 @@ def get_my_submission() -> Any:
 
     identity = _get_identity()
 
-    with _get_db_conn() as conn:
+    conn = _get_db_conn()
+    try:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -575,6 +595,8 @@ def get_my_submission() -> Any:
                 (identity["uid"],),
             )
             row = cur.fetchone()
+    finally:
+        conn.close()
 
     if row is None:
         raise NotFoundError("No submission found")

@@ -324,7 +324,23 @@ def test_create_submission_returns_500_when_db_fails(client, monkeypatch):
 
     resp = client.post(
         "/api/submissions",
-        json={"title": "x"},
+        json={
+            "dimensions": [
+                {"id": 1, "name": "D1", "score": 1.0, "color": "#000"}
+            ],
+            "applicationDomains": [
+                {
+                    "id": 1,
+                    "name": "Domain A",
+                    "shortName": "A",
+                    "applicability": "in_scope",
+                    "involvement": "none",
+                    "value": "low",
+                    "confidence": "low",
+                    "capabilityIds": [],
+                }
+            ],
+        },
         headers={"Authorization": "Bearer token"},
     )
     assert resp.status_code == 500
