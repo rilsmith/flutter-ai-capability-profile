@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/defaults.dart';
@@ -15,25 +16,34 @@ import '../utils/json_export_web.dart'
 import '../utils/migrate_application_domains.dart';
 
 class DashboardNotifier extends ChangeNotifier {
-  DashboardNotifier() {
+  DashboardNotifier({http.Client? httpClient})
+      : _httpClient = httpClient ?? http.Client() {
     debugPrint('DashboardNotifier: Constructor started');
     _load();
   }
 
   /// Testing-only constructor that skips async SharedPreferences loading and
   /// uses the default dashboard data immediately.
-  DashboardNotifier.forTesting()
+  DashboardNotifier.forTesting({http.Client? httpClient})
       : _data = defaultDashboardData,
+        _httpClient = httpClient ?? http.Client(),
         _initialized = true;
 
+  final http.Client _httpClient;
   DashboardData _data = defaultDashboardData;
   bool _initialized = false;
   Timer? _persistTimer;
   int? _previewDimensionId;
   double? _previewScore;
+  bool _submitting = false;
+  String? _submitSuccess;
+  String? _submitError;
 
   DashboardData get data => _data;
   bool get initialized => _initialized;
+  bool get submitting => _submitting;
+  String? get submitSuccess => _submitSuccess;
+  String? get submitError => _submitError;
 
   /// Dimensions with in-flight radar drag score overlaid (no persistence).
   List<Dimension> get effectiveDimensions {
@@ -264,6 +274,74 @@ class DashboardNotifier extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(storageKey);
     notifyListeners();
+  }
+
+  void clearSubmitStatus() {
+    if (_submitSuccess == null && _submitError == null) return;
+    _submitSuccess = null;
+    _submitError = null;
+    notifyListeners();
+  }
+
+  /// Submit the current matrix snapshot to the backend.
+  ///
+  /// This method prevents duplicate submissions while a request is already in
+  /// flight. On success, [submitSuccess] is set to a confirmation message and
+  /// the caller should refresh downstream tabs. On failure, [submitError] is
+  /// set to a readable message and the current matrix state is preserved so
+  /// the user can retry.
+  Future<void> submit(String token) async {
+    if (_submitting) return;
+    _submitting = true;
+    _submitSuccess = null;
+    _submitError = null;
+    notifyListeners();
+
+    try {
+      final origin = kIsWeb ? Uri.base.origin : 'http://localhost:5000';
+      final response = await _httpClient
+          .post(
+            Uri.parse('$origin/api/submissions'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode(_data.toJson()),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 201) {
+        final result = jsonDecode(response.body) as Map<String, dynamic>;
+        final id = result['id'] as String?;
+        final submittedAt = result['submitted_at'] as String?;
+        _submitSuccess = 'Submitted successfully';
+        if (id != null && id.isNotEmpty) {
+          final shortId = id.length > 8 ? id.substring(0, 8) : id;
+          _submitSuccess = 'Submitted successfully (ID: $shortId)';
+        }
+        if (submittedAt != null && submittedAt.isNotEmpty) {
+          _submitSuccess = '${_submitSuccess!} at $submittedAt';
+        }
+      } else {
+        String message;
+        try {
+          final error = jsonDecode(response.body) as Map<String, dynamic>;
+          message = error['error'] as String? ??
+              'Submission failed (${response.statusCode})';
+        } catch (_) {
+          message = 'Submission failed (${response.statusCode})';
+        }
+        _submitError = message;
+      }
+    } on TimeoutException {
+      _submitError = 'Submission timed out. Please try again.';
+    } catch (e) {
+      _submitError = 'Submission failed: $e';
+    } finally {
+      _submitting = false;
+      notifyListeners();
+    }
   }
 
   void exportJson() {

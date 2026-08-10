@@ -17,6 +17,11 @@ class CapabilityApplicationMatrix extends StatelessWidget {
     this.onSelectDimension,
     this.onSelectDomain,
     this.onToggleCapabilityLink,
+    this.isSubmitting = false,
+    this.submitEnabled = false,
+    this.onSubmit,
+    this.submitSuccess,
+    this.submitError,
   });
 
   final List<Dimension> dimensions;
@@ -27,6 +32,11 @@ class CapabilityApplicationMatrix extends StatelessWidget {
   final ValueChanged<int>? onSelectDimension;
   final ValueChanged<int>? onSelectDomain;
   final void Function(int domainId, int capabilityId)? onToggleCapabilityLink;
+  final bool isSubmitting;
+  final bool submitEnabled;
+  final VoidCallback? onSubmit;
+  final String? submitSuccess;
+  final String? submitError;
 
   static const _capabilityWidth = 180.0;
   static const _cellWidthMin = 34.0;
@@ -125,9 +135,120 @@ class CapabilityApplicationMatrix extends StatelessWidget {
               );
             },
           ),
+          if (onSubmit != null) ...[
+            const SizedBox(height: 16),
+            const Divider(height: 1, color: DashboardTheme.cardBorder),
+            const SizedBox(height: 16),
+            _SubmitStatus(success: submitSuccess, error: submitError),
+            const SizedBox(height: 12),
+            _SubmitButton(
+              isSubmitting: isSubmitting,
+              enabled: submitEnabled,
+              onSubmit: onSubmit,
+            ),
+          ],
         ],
       ),
     );
+  }
+}
+
+class _SubmitButton extends StatelessWidget {
+  const _SubmitButton({
+    required this.isSubmitting,
+    required this.enabled,
+    required this.onSubmit,
+  });
+
+  final bool isSubmitting;
+  final bool enabled;
+  final VoidCallback? onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ElevatedButton.icon(
+        onPressed: enabled && !isSubmitting && onSubmit != null
+            ? onSubmit
+            : null,
+        icon: isSubmitting
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(Icons.cloud_upload, size: 18),
+        label: Text(isSubmitting ? 'Submitting...' : 'Submit'),
+      ),
+    );
+  }
+}
+
+class _SubmitStatus extends StatelessWidget {
+  const _SubmitStatus({this.success, this.error});
+
+  final String? success;
+  final String? error;
+
+  @override
+  Widget build(BuildContext context) {
+    if (success != null) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF0FDF4),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFBBF7D0)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Color(0xFF16A34A), size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                success!,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF166534),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (error != null) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFEF2F2),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFFECACA)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Color(0xFFDC2626), size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                error!,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF991B1B),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
   }
 }
 
@@ -330,9 +451,9 @@ class _MatrixDataRow extends StatelessWidget {
           return Container(
             width: cellWidth,
             color: colSelected
-                ? DashboardTheme.primaryLight.withOpacity(0.65)
+                ? DashboardTheme.primaryLight.withValues(alpha: 0.65)
                 : rowSelected
-                    ? DashboardTheme.primaryLight.withOpacity(0.35)
+                    ? DashboardTheme.primaryLight.withValues(alpha: 0.35)
                     : null,
             child: Center(
               child: isNa

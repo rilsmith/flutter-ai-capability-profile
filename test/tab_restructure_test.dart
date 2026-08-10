@@ -35,9 +35,23 @@ void main() {
 
   group('SDLCTab', () {
     testWidgets('renders only matrix explanation and matrix card', (tester) async {
+      final authNotifier = AuthNotifier.forTesting(
+        user: const GitHubUser(
+          login: 'testuser',
+          name: 'Test User',
+          email: 'testuser@example.com',
+          avatarUrl: '',
+        ),
+        token: 'fake-token',
+      );
+
       await tester.pumpWidget(
-        ChangeNotifierProvider(
-          create: (_) => DashboardNotifier.forTesting(),
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: authNotifier),
+            ChangeNotifierProvider(create: (_) => DashboardNotifier.forTesting()),
+            ChangeNotifierProvider(create: (_) => TeamNotifier.forTesting()),
+          ],
           child: const MaterialApp(
             home: Scaffold(body: SDLCTab()),
           ),

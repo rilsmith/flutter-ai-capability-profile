@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../providers/auth_notifier.dart';
 import '../providers/dashboard_notifier.dart';
+import '../providers/team_notifier.dart';
 import 'capability_application_matrix.dart';
 import 'how_to_read_card.dart';
 
@@ -10,8 +12,12 @@ class SDLCTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthNotifier>();
     final notifier = context.watch<DashboardNotifier>();
     final data = notifier.data;
+
+    final token = auth.token;
+    final isAuthenticated = auth.isLoggedIn && token != null;
 
     final matrix = CapabilityApplicationMatrix(
       dimensions: data.dimensions,
@@ -22,6 +28,11 @@ class SDLCTab extends StatelessWidget {
       onSelectDimension: null,
       onSelectDomain: null,
       onToggleCapabilityLink: notifier.toggleDomainCapability,
+      isSubmitting: notifier.submitting,
+      submitEnabled: isAuthenticated && !notifier.submitting,
+      onSubmit: isAuthenticated ? () => _handleSubmit(context) : null,
+      submitSuccess: notifier.submitSuccess,
+      submitError: notifier.submitError,
     );
 
     final applicationMatrixHowToRead = HowToReadCard(
@@ -39,5 +50,19 @@ class SDLCTab extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _handleSubmit(BuildContext context) async {
+    final auth = context.read<AuthNotifier>();
+    final dashboard = context.read<DashboardNotifier>();
+    final team = context.read<TeamNotifier>();
+    final token = auth.token;
+    if (token == null) return;
+
+    await dashboard.submit(token);
+
+    if (dashboard.submitSuccess != null) {
+      team.fetchTeamData(token, force: true);
+    }
   }
 }
