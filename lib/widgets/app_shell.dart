@@ -20,6 +20,7 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  String? _lastLoadToken;
 
   @override
   void initState() {
@@ -39,16 +40,23 @@ class _AppShellState extends State<AppShell> with SingleTickerProviderStateMixin
     final dashboardNotifier = context.read<DashboardNotifier>();
     final teamNotifier = context.read<TeamNotifier>();
     final token = auth.token;
-    // Defer the fetch to avoid notifying listeners during the build phase.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (token != null && token.isNotEmpty) {
+
+    // Only trigger a fetch once per token to avoid the request loops that
+    // rebuilds during the async load can otherwise cause.
+    if (token != null && token.isNotEmpty && token != _lastLoadToken) {
+      _lastLoadToken = token;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
         dashboardNotifier.loadLatestSubmission(token);
         teamNotifier.fetchTeamData(token);
-      } else {
+      });
+    } else if ((token == null || token.isEmpty) && _lastLoadToken != null) {
+      _lastLoadToken = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
         teamNotifier.clear();
-      }
-    });
+      });
+    }
   }
 
   @override

@@ -115,7 +115,69 @@ void main() {
       expect(notifier.latestError, 'Server error');
       expect(notifier.data.applicationDomains[0].capabilityIds, isEmpty);
       expect(notifier.loadingLatest, isFalse);
-      expect(notifier.latestLoaded, isFalse);
+      // Load is marked as attempted so automatic retry loops do not occur.
+      expect(notifier.latestLoaded, isTrue);
+    });
+
+    testWidgets('ignores duplicate calls while a request is in flight',
+        (tester) async {
+      int requestCount = 0;
+      final mockClient = MockClient((request) async {
+        requestCount++;
+        await Future.delayed(const Duration(milliseconds: 100));
+        return http.Response(
+          jsonEncode({
+            'id': '1',
+            'submitted_at': '2024-01-01T00:00:00Z',
+            'payload': defaultDashboardData.toJson(),
+          }),
+          200,
+          headers: const {'content-type': 'application/json'},
+        );
+      });
+
+      final notifier = DashboardNotifier.forTesting(
+        httpClient: mockClient,
+        skipApiCalls: false,
+      );
+
+      final future1 = notifier.loadLatestSubmission('test-token');
+      final future2 = notifier.loadLatestSubmission('test-token');
+
+      await tester.pumpAndSettle(const Duration(milliseconds: 150));
+      await future1;
+      await future2;
+
+      expect(requestCount, 1);
+      expect(notifier.loadingLatest, isFalse);
+      expect(notifier.latestLoaded, isTrue);
+    });
+
+    testWidgets('does not retry automatically after failure', (tester) async {
+      int requestCount = 0;
+      final mockClient = MockClient((request) async {
+        requestCount++;
+        return http.Response(
+          jsonEncode({'error': 'Server error'}),
+          500,
+          headers: const {'content-type': 'application/json'},
+        );
+      });
+
+      final notifier = DashboardNotifier.forTesting(
+        httpClient: mockClient,
+        skipApiCalls: false,
+      );
+
+      await notifier.loadLatestSubmission('test-token');
+      await tester.pumpAndSettle();
+
+      await notifier.loadLatestSubmission('test-token');
+      await tester.pumpAndSettle();
+
+      expect(requestCount, 1);
+      expect(notifier.latestError, 'Server error');
+      expect(notifier.latestLoaded, isTrue);
     });
 
     testWidgets('reports loading while request is in flight', (tester) async {
@@ -346,6 +408,60 @@ void main() {
       expect(capturedRequest!.method, 'GET');
       expect(capturedRequest!.url.path, '/api/submissions/me');
       expect(capturedRequest!.headers['Authorization'], 'Bearer test-token');
+    });
+
+    testWidgets('triggers loadLatestSubmission only once per token',
+        (tester) async {
+      int requestCount = 0;
+      final mockClient = MockClient((request) async {
+        requestCount++;
+        return http.Response(
+          jsonEncode({
+            'id': '1',
+            'submitted_at': '2024-01-01T00:00:00Z',
+            'payload': defaultDashboardData.toJson(),
+          }),
+          200,
+          headers: const {'content-type': 'application/json'},
+        );
+      });
+
+      final authNotifier = AuthNotifier.forTesting(
+        user: const GitHubUser(
+          login: 'testuser',
+          name: 'Test User',
+          email: 'testuser@example.com',
+          avatarUrl: '',
+        ),
+        token: 'test-token',
+      );
+      final dashboardNotifier = DashboardNotifier.forTesting(
+        httpClient: mockClient,
+        skipApiCalls: false,
+      );
+
+      await tester.binding.setSurfaceSize(const Size(1200, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: authNotifier),
+            ChangeNotifierProvider.value(value: dashboardNotifier),
+            ChangeNotifierProvider(create: (_) => TeamNotifier.forTesting()),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: AppShell()),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(requestCount, 1);
     });
   });
 }

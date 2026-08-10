@@ -372,6 +372,9 @@ class DashboardNotifier extends ChangeNotifier {
       _latestLoaded = true;
       return;
     }
+    // Guard against concurrent loads and automatic retry loops triggered by
+    // rebuilds during the async request.
+    if (_loadingLatest) return;
     if (!force && _lastLatestToken == token && _latestLoaded) return;
 
     _lastLatestToken = token;
@@ -399,7 +402,8 @@ class DashboardNotifier extends ChangeNotifier {
         final result = jsonDecode(response.body) as Map<String, dynamic>;
         final payload = result['payload'] as Map<String, dynamic>?;
         if (payload != null) {
-          _data = DashboardData.fromJson(payload);
+          // Merge with defaults so older/missing fields do not blank the matrix.
+          _data = _mergeParsed(DashboardData.fromJson(payload));
           await _persist();
         }
         _latestLoaded = true;
@@ -414,13 +418,16 @@ class DashboardNotifier extends ChangeNotifier {
         }
         _latestError = message;
         _data = defaultDashboardData;
+        _latestLoaded = true;
       }
     } on TimeoutException {
       _latestError = 'Loading latest submission timed out. Please try again.';
       _data = defaultDashboardData;
+      _latestLoaded = true;
     } catch (e) {
       _latestError = 'Failed to load latest submission: $e';
       _data = defaultDashboardData;
+      _latestLoaded = true;
     } finally {
       _loadingLatest = false;
       notifyListeners();
