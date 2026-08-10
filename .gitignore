@@ -163,3 +163,12 @@ app.*.map.json
 
 # AI
 .kilo/
+
+# Python virtual environment
+.venv/
+__pycache__/
+.pytest_cache/
+
+# Environment variables
+.env
+
