@@ -725,3 +725,29 @@ def test_unknown_path_falls_back_to_index_html(client):
     resp = client.get("/some/spa/route")
     assert resp.status_code == 200
     assert b"flutter" in resp.data.lower()
+
+
+# ── Startup environment validation ────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "var_name",
+    [
+        "GITHUB_CLIENT_ID",
+        "GITHUB_CLIENT_SECRET",
+        "DATABASE_URL",
+        "REDIRECT_URI",
+        "LDAP_URL",
+        "LDAP_BASE_DN",
+        "CORS_ORIGIN",
+    ],
+)
+def test_validate_env_reports_missing_required_variable(monkeypatch, var_name):
+    monkeypatch.delenv(var_name, raising=False)
+    missing = server_module._validate_env()
+    assert var_name in missing
+
+
+def test_validate_env_returns_empty_when_all_required_variables_present():
+    assert server_module._validate_env() == []
+

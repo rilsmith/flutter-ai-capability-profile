@@ -18,9 +18,14 @@ from typing import Any
 
 import init_db
 import psycopg2
+from dotenv import load_dotenv
 from flask import Flask, g, jsonify, redirect, request, send_from_directory
 from ldap3 import ANONYMOUS, SUBTREE, Connection, Server
 from urllib.error import HTTPError
+
+# Load environment variables from an uncommitted .env file if present.
+# Existing environment variables take precedence, so test fixtures are safe.
+load_dotenv()
 
 
 # ── Configuration ────────────────────────────────────────────────────────────
@@ -29,20 +34,31 @@ REQUIRED_ENV = [
     "GITHUB_CLIENT_ID",
     "GITHUB_CLIENT_SECRET",
     "DATABASE_URL",
+    "REDIRECT_URI",
+    "LDAP_URL",
+    "LDAP_BASE_DN",
+    "CORS_ORIGIN",
 ]
 
 GITHUB_CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID")
 GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET")
-REDIRECT_URI = os.environ.get("REDIRECT_URI", "http://localhost:5000/auth")
-LDAP_URL = os.environ.get("LDAP_URL", "ldap://ldap.loc.adobe.net")
-LDAP_BASE_DN = os.environ.get("LDAP_BASE_DN", "o=adbe")
+REDIRECT_URI = os.environ.get("REDIRECT_URI")
+LDAP_URL = os.environ.get("LDAP_URL")
+LDAP_BASE_DN = os.environ.get("LDAP_BASE_DN")
 DATABASE_URL = os.environ.get("DATABASE_URL")
-CORS_ORIGIN = os.environ.get("CORS_ORIGIN", "*")
+CORS_ORIGIN = os.environ.get("CORS_ORIGIN")
 WEB_DIR = os.environ.get("WEB_DIR", "build/web")
 
-_missing = [name for name in REQUIRED_ENV if not os.environ.get(name)]
+
+def _validate_env() -> list[str]:
+    """Return the list of required environment variables that are missing."""
+    return [name for name in REQUIRED_ENV if not os.environ.get(name)]
+
+
+_missing = _validate_env()
 if _missing:
     print(f"ERROR: Missing required environment variables: {', '.join(_missing)}")
+    print("Copy .env.example to .env and fill in the required values.")
     sys.exit(1)
 
 WEB_DIR_ABS = os.path.abspath(WEB_DIR)
