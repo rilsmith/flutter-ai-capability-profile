@@ -16,6 +16,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
+import init_db
 import psycopg2
 from flask import Flask, jsonify, redirect, request, send_from_directory
 from ldap3 import ANONYMOUS, SUBTREE, Connection, Server
@@ -239,12 +240,13 @@ def static_files(path: str) -> Any:
 # ── Entry point ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    # Verify database connectivity on startup; fail fast if DATABASE_URL is
-    # malformed or the database is unreachable.
+    # Apply the database schema on startup. This ensures the submissions table
+    # and required indexes exist before the API accepts traffic, satisfying both
+    # local development and Kubernetes init requirements.
     try:
-        _db_check()
+        init_db.init_db()
     except Exception as exc:
-        print(f"ERROR: unable to connect to database: {exc}")
+        print(f"ERROR: unable to initialize database: {exc}")
         sys.exit(1)
 
     print(f"Serving Flutter app at http://localhost:5000")

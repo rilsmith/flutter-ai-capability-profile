@@ -6,6 +6,7 @@ external services (GitHub, LDAP) where appropriate.
 
 import json
 import os
+import tempfile
 from unittest import mock
 
 import pytest
@@ -13,12 +14,21 @@ import pytest
 # Set required environment variables before importing the server module.
 os.environ["GITHUB_CLIENT_ID"] = "test_client_id"
 os.environ["GITHUB_CLIENT_SECRET"] = "test_client_secret"
-os.environ["DATABASE_URL"] = "postgresql://postgres:postgres@localhost:5432/capability_dashboard"
+os.environ.setdefault(
+    "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/capability_dashboard"
+)
 os.environ["REDIRECT_URI"] = "http://localhost:5000/auth"
 os.environ["LDAP_URL"] = "ldap://ldap.loc.adobe.net"
 os.environ["LDAP_BASE_DN"] = "o=adbe"
 os.environ["CORS_ORIGIN"] = "http://localhost:5000"
-os.environ["WEB_DIR"] = "build/web"
+
+# Use a temporary web root so server.py can import without a real Flutter build.
+_tmp_web = tempfile.TemporaryDirectory()
+os.environ["WEB_DIR"] = _tmp_web.name
+with open(os.path.join(_tmp_web.name, "index.html"), "w", encoding="utf-8") as f:
+    f.write("<html><body>AI Capability Dashboard</body></html><!-- flutter -->")
+with open(os.path.join(_tmp_web.name, "manifest.json"), "w", encoding="utf-8") as f:
+    f.write('{"name":"AI Capability Dashboard"}')
 
 import server as server_module  # noqa: E402
 from server import app  # noqa: E402
