@@ -18,8 +18,9 @@ from typing import Any
 
 import init_db
 import psycopg2
-from flask import Flask, jsonify, redirect, request, send_from_directory
+from flask import Flask, g, jsonify, redirect, request, send_from_directory
 from ldap3 import ANONYMOUS, SUBTREE, Connection, Server
+from urllib.error import HTTPError
 
 
 # ── Configuration ────────────────────────────────────────────────────────────
@@ -74,7 +75,45 @@ def _add_cors_headers(response: Any) -> Any:
     return response
 
 
+# ── Custom errors ────────────────────────────────────────────────────────────
+
+class AuthError(Exception):
+    """Raised when a request cannot be authenticated."""
+
+
+class ValidationError(Exception):
+    """Raised when a request is malformed or missing required fields."""
+
+
+class NotFoundError(Exception):
+    """Raised when a requested resource does not exist."""
+
+
+class GitHubUnavailableError(Exception):
+    """Raised when the GitHub API is rate-limited or otherwise unavailable."""
+
+
 # ── Error handling ────────────────────────────────────────────────────────────
+
+@app.errorhandler(AuthError)
+def _handle_auth_error(error: AuthError) -> Any:
+    return jsonify({"error": str(error)}), 401
+
+
+@app.errorhandler(ValidationError)
+def _handle_validation_error(error: ValidationError) -> Any:
+    return jsonify({"error": str(error)}), 400
+
+
+@app.errorhandler(NotFoundError)
+def _handle_not_found_error(error: NotFoundError) -> Any:
+    return jsonify({"error": str(error)}), 404
+
+
+@app.errorhandler(GitHubUnavailableError)
+def _handle_github_unavailable_error(error: GitHubUnavailableError) -> Any:
+    return jsonify({"error": str(error)}), 503
+
 
 @app.errorhandler(404)
 def _handle_not_found(_error: Any) -> Any:
@@ -115,6 +154,110 @@ def ready() -> Any:
     except Exception as exc:
         logger.exception("Database readiness check failed")
         return jsonify({"error": f"Database unreachable: {exc}"}), 503
+
+
+# ── GitHub token validation ──────────────────────────────────────────────────
+
+
+def _github_api_request(url: str, token: str) -> Any:
+    """Call a GitHub API endpoint with a Bearer token."""
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+            "User-Agent": "ai-capability-dashboard",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.load(resp)
+    except HTTPError as exc:
+        if exc.code in (401, 403):
+            raise AuthError(f"GitHub token rejected ({exc.code})")
+        if exc.code >= 500:
+            raise GitHubUnavailableError(f"GitHub API unavailable ({exc.code})")
+        raise GitHubUnavailableError(f"GitHub API error ({exc.code})")
+
+
+def _github_user(token: str) -> dict:
+    """Return the GitHub /user payload for a token."""
+    data = _github_api_request("https://api.github.com/user", token)
+    if not isinstance(data, dict):
+        raise AuthError("Invalid response from GitHub /user")
+    return data
+
+
+def _github_emails(token: str) -> list:
+    """Return the GitHub /user/emails payload for a token."""
+    data = _github_api_request("https://api.github.com/user/emails", token)
+    if not isinstance(data, list):
+        raise AuthError("Invalid response from GitHub /user/emails")
+    return data
+
+
+def _derive_identity(token: str) -> dict:
+    """Validate a GitHub token and derive the user identity and UID."""
+    user = _github_user(token)
+    emails = _github_emails(token)
+    primary = next(
+        (e for e in emails if e.get("primary") and e.get("verified")), None
+    )
+    if primary is None:
+        primary = next((e for e in emails if e.get("verified")), None)
+    if primary is None:
+        raise AuthError("No verified primary email found for this GitHub account")
+
+    email = primary.get("email", "")
+    if "@" not in email:
+        raise AuthError("Invalid primary email from GitHub")
+    uid = email.split("@")[0].split("+")[0]
+    if not uid:
+        raise AuthError("Could not derive a user UID from the GitHub email")
+
+    name = user.get("name") or user.get("login") or uid
+    return {
+        "token": token,
+        "login": user.get("login"),
+        "name": name,
+        "email": email,
+        "avatar_url": user.get("avatar_url"),
+        "uid": uid,
+    }
+
+
+def _extract_bearer_token() -> str:
+    """Read and validate the Authorization: Bearer header."""
+    header = request.headers.get("Authorization", "")
+    if not header.startswith("Bearer "):
+        raise AuthError("Missing or invalid Authorization header")
+    token = header[7:].strip()
+    if not token:
+        raise AuthError("Missing or invalid Authorization header")
+    return token
+
+
+def _get_identity() -> dict:
+    """Return the authenticated GitHub identity, validating once per request."""
+    if "identity" in g:
+        return g.identity
+    token = _extract_bearer_token()
+    g.identity = _derive_identity(token)
+    return g.identity
+
+
+def _get_manager(uid: str) -> dict:
+    """Return manager_uid and department_number for a user UID from LDAP."""
+    ldap = _ldap_lookup(uid)
+    if not ldap.get("found"):
+        raise AuthError("User not found in LDAP")
+    manager_uid = ldap.get("manager", "")
+    if not manager_uid:
+        raise AuthError("Manager information not available from LDAP")
+    return {
+        "manager_uid": manager_uid,
+        "department_number": ldap.get("departmentNumber", "") or "",
+    }
 
 
 # ── GitHub OAuth callback ────────────────────────────────────────────────────
@@ -213,6 +356,256 @@ def ldap_api() -> Any:
     except Exception as exc:
         logger.exception("LDAP lookup failed")
         return jsonify({"error": str(exc)}), 500
+
+
+# ── Submission helpers ───────────────────────────────────────────────────────
+
+_INVOLVEMENT_MAP = {"none": 0, "occasional": 1, "regular": 2}
+_SIGNAL_MAP = {"low": 0, "moderate": 1, "high": 2}
+
+
+def _get_db_conn() -> Any:
+    """Return a new PostgreSQL connection."""
+    return psycopg2.connect(DATABASE_URL)
+
+
+def _json_payload() -> dict:
+    """Parse and validate a JSON request body."""
+    if not request.is_json:
+        raise ValidationError("Request body must be JSON")
+    body = request.get_json(silent=True)
+    if body is None:
+        raise ValidationError("Malformed JSON payload")
+    if not isinstance(body, dict) or not body:
+        raise ValidationError("Payload must be a non-empty JSON object")
+    return body
+
+
+def _row_to_submission(row: tuple) -> dict:
+    """Convert a submissions table row into a JSON-serializable dict."""
+    payload = row[7]
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+    return {
+        "id": str(row[0]),
+        "user_uid": row[1],
+        "user_email": row[2] or "",
+        "user_display_name": row[3] or "",
+        "manager_uid": row[4],
+        "department_number": row[5] or "",
+        "submitted_at": row[6].isoformat() if row[6] else None,
+        "payload": payload,
+    }
+
+
+def _latest_team_submissions(manager_uid: str) -> list:
+    """Return the latest submission per user for a given manager."""
+    with _get_db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT ON (user_uid)
+                    id, user_uid, user_email, user_display_name,
+                    manager_uid, department_number, submitted_at, payload
+                FROM submissions
+                WHERE manager_uid = %s
+                ORDER BY user_uid, submitted_at DESC
+                """,
+                (manager_uid,),
+            )
+            return cur.fetchall()
+
+
+def _compute_aggregate(rows: list) -> dict:
+    """Compute dimension and domain averages from the latest per-user rows."""
+    dim_stats: dict = {}
+    domain_stats: dict = {}
+
+    for row in rows:
+        payload = row[7]
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+
+        for dim in payload.get("dimensions", []):
+            did = dim.get("id")
+            if did is None:
+                continue
+            entry = dim_stats.setdefault(
+                did,
+                {
+                    "id": did,
+                    "name": dim.get("name", ""),
+                    "color": dim.get("color", ""),
+                    "sum": 0.0,
+                    "count": 0,
+                },
+            )
+            entry["sum"] += float(dim.get("score", 0.0))
+            entry["count"] += 1
+
+        for domain in payload.get("applicationDomains", []):
+            did = domain.get("id")
+            if did is None:
+                continue
+            entry = domain_stats.setdefault(
+                did,
+                {
+                    "id": did,
+                    "name": domain.get("name", ""),
+                    "shortName": domain.get("shortName", ""),
+                    "involvement_sum": 0.0,
+                    "value_sum": 0.0,
+                    "confidence_sum": 0.0,
+                    "count": 0,
+                    "in_scope_count": 0,
+                    "active_count": 0,
+                    "not_applicable_count": 0,
+                },
+            )
+            entry["involvement_sum"] += _INVOLVEMENT_MAP.get(
+                domain.get("involvement", "none"), 0
+            )
+            entry["value_sum"] += _SIGNAL_MAP.get(domain.get("value", "low"), 0)
+            entry["confidence_sum"] += _SIGNAL_MAP.get(
+                domain.get("confidence", "low"), 0
+            )
+            entry["count"] += 1
+            if domain.get("applicability", "in_scope") == "not_applicable":
+                entry["not_applicable_count"] += 1
+            else:
+                entry["in_scope_count"] += 1
+                if domain.get("involvement", "none") != "none":
+                    entry["active_count"] += 1
+
+    dimensions = []
+    for did in sorted(dim_stats):
+        s = dim_stats[did]
+        dimensions.append(
+            {
+                "id": s["id"],
+                "name": s["name"],
+                "color": s["color"],
+                "average": round(s["sum"] / s["count"], 1) if s["count"] else 0.0,
+            }
+        )
+
+    domains = []
+    for did in sorted(domain_stats):
+        s = domain_stats[did]
+        count = s["count"]
+        domains.append(
+            {
+                "id": s["id"],
+                "name": s["name"],
+                "shortName": s["shortName"],
+                "involvement_average": round(s["involvement_sum"] / count, 1)
+                if count
+                else 0.0,
+                "value_average": round(s["value_sum"] / count, 1)
+                if count
+                else 0.0,
+                "confidence_average": round(s["confidence_sum"] / count, 1)
+                if count
+                else 0.0,
+                "in_scope_count": s["in_scope_count"],
+                "active_count": s["active_count"],
+                "not_applicable_count": s["not_applicable_count"],
+            }
+        )
+
+    return {"member_count": len(rows), "dimensions": dimensions, "domains": domains}
+
+
+# ── Submissions API ───────────────────────────────────────────────────────────
+
+@app.route("/api/submissions", methods=["POST", "OPTIONS"])
+def create_submission() -> Any:
+    """Save a new submission snapshot for the authenticated user."""
+    if request.method == "OPTIONS":
+        return "", 204
+
+    identity = _get_identity()
+    manager = _get_manager(identity["uid"])
+    payload = _json_payload()
+
+    with _get_db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO submissions
+                    (user_uid, user_email, user_display_name, manager_uid,
+                     department_number, payload)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING id, submitted_at
+                """,
+                (
+                    identity["uid"],
+                    identity["email"],
+                    identity["name"],
+                    manager["manager_uid"],
+                    manager["department_number"],
+                    json.dumps(payload),
+                ),
+            )
+            row = cur.fetchone()
+            conn.commit()
+
+    return jsonify({"id": str(row[0]), "submitted_at": row[1].isoformat()}), 201
+
+
+@app.route("/api/submissions/me", methods=["GET", "OPTIONS"])
+def get_my_submission() -> Any:
+    """Return the authenticated user's latest submission."""
+    if request.method == "OPTIONS":
+        return "", 204
+
+    identity = _get_identity()
+
+    with _get_db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, user_uid, user_email, user_display_name,
+                       manager_uid, department_number, submitted_at, payload
+                FROM submissions
+                WHERE user_uid = %s
+                ORDER BY submitted_at DESC
+                LIMIT 1
+                """,
+                (identity["uid"],),
+            )
+            row = cur.fetchone()
+
+    if row is None:
+        raise NotFoundError("No submission found")
+
+    return jsonify(_row_to_submission(row))
+
+
+@app.route("/api/submissions/team", methods=["GET", "OPTIONS"])
+def get_team_submissions() -> Any:
+    """Return the latest submission per user for the authenticated user's team."""
+    if request.method == "OPTIONS":
+        return "", 204
+
+    identity = _get_identity()
+    manager = _get_manager(identity["uid"])
+    rows = _latest_team_submissions(manager["manager_uid"])
+
+    return jsonify({"submissions": [_row_to_submission(row) for row in rows]})
+
+
+@app.route("/api/submissions/team/aggregate", methods=["GET", "OPTIONS"])
+def get_team_aggregate() -> Any:
+    """Return aggregated dimension and domain data for the user's team."""
+    if request.method == "OPTIONS":
+        return "", 204
+
+    identity = _get_identity()
+    manager = _get_manager(identity["uid"])
+    rows = _latest_team_submissions(manager["manager_uid"])
+
+    return jsonify(_compute_aggregate(rows))
 
 
 # ── Catch-all for unknown API paths ───────────────────────────────────────────
