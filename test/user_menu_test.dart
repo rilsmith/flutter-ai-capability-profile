@@ -91,7 +91,7 @@ void main() {
       expect(find.text('Sign out'), findsOneWidget);
     });
 
-    testWidgets('omits manager and department when LDAP info is missing', (tester) async {
+    testWidgets('shows unavailable manager and department when LDAP info is missing', (tester) async {
       final authNotifier = AuthNotifier.forTesting(
         user: const GitHubUser(
           login: 'testuser',
@@ -114,8 +114,45 @@ void main() {
       await tester.tap(find.byType(UserMenu));
       await tester.pumpAndSettle();
 
-      expect(find.text('Manager'), findsNothing);
-      expect(find.text('Department'), findsNothing);
+      expect(find.text('Manager'), findsOneWidget);
+      expect(find.text('Department'), findsOneWidget);
+      expect(find.text('unavailable'), findsNWidgets(2));
+      expect(find.text('Sign out'), findsOneWidget);
+    });
+
+    testWidgets('shows unavailable only for empty LDAP fields', (tester) async {
+      final authNotifier = AuthNotifier.forTesting(
+        user: const GitHubUser(
+          login: 'testuser',
+          name: 'Test User',
+          email: 'testuser@example.com',
+          avatarUrl: '',
+        ),
+        ldapInfo: const LdapInfo(
+          uid: 'testuser',
+          displayName: 'Test User',
+          manager: '',
+          departmentNumber: '12345',
+        ),
+      );
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: authNotifier,
+          child: const MaterialApp(
+            home: Scaffold(body: UserMenu()),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(UserMenu));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Manager'), findsOneWidget);
+      expect(find.text('Department'), findsOneWidget);
+      expect(find.text('unavailable'), findsOneWidget);
+      expect(find.text('12345'), findsOneWidget);
       expect(find.text('Sign out'), findsOneWidget);
     });
 

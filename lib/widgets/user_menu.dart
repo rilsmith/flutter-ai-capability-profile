@@ -21,8 +21,12 @@ class UserMenu extends StatelessWidget {
     if (user == null) return const SizedBox.shrink();
 
     final ldap = auth.ldapInfo;
-    final hasManager = ldap != null && ldap.manager.isNotEmpty;
-    final hasDepartment = ldap != null && ldap.departmentNumber.isNotEmpty;
+    final managerValue = (ldap != null && ldap.manager.isNotEmpty)
+        ? ldap.manager
+        : 'unavailable';
+    final departmentValue = (ldap != null && ldap.departmentNumber.isNotEmpty)
+        ? ldap.departmentNumber
+        : 'unavailable';
     final hasAvatar = user.avatarUrl.isNotEmpty;
 
     return PopupMenuButton<void>(
@@ -131,16 +135,20 @@ class UserMenu extends StatelessWidget {
                     ),
                   ],
                 ),
-                if (hasManager || hasDepartment) ...[
-                  const SizedBox(height: 12),
-                  const Divider(height: 1, color: DashboardTheme.cardBorder),
-                  const SizedBox(height: 12),
-                  if (hasManager)
-                    _InfoRow(label: 'Manager', value: ldap.manager),
-                  if (hasManager && hasDepartment) const SizedBox(height: 6),
-                  if (hasDepartment)
-                    _InfoRow(label: 'Department', value: ldap.departmentNumber),
-                ],
+                const SizedBox(height: 12),
+                const Divider(height: 1, color: DashboardTheme.cardBorder),
+                const SizedBox(height: 12),
+                _InfoRow(
+                  label: 'Manager',
+                  value: managerValue,
+                  isUnavailable: managerValue == 'unavailable',
+                ),
+                const SizedBox(height: 6),
+                _InfoRow(
+                  label: 'Department',
+                  value: departmentValue,
+                  isUnavailable: departmentValue == 'unavailable',
+                ),
               ],
             ),
           ),
@@ -169,10 +177,15 @@ class UserMenu extends StatelessWidget {
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value});
+  const _InfoRow({
+    required this.label,
+    required this.value,
+    this.isUnavailable = false,
+  });
 
   final String label;
   final String value;
+  final bool isUnavailable;
 
   @override
   Widget build(BuildContext context) {
@@ -196,10 +209,11 @@ class _InfoRow extends StatelessWidget {
         Expanded(
           child: Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: DashboardTheme.body,
+              fontWeight: isUnavailable ? FontWeight.w500 : FontWeight.w600,
+              color: isUnavailable ? DashboardTheme.muted : DashboardTheme.body,
+              fontStyle: isUnavailable ? FontStyle.italic : FontStyle.normal,
             ),
           ),
         ),
