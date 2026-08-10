@@ -143,6 +143,38 @@ void main() {
       expect(find.text('Team Radar — 0 members'), findsNothing);
       expect(find.text('Team Radar'), findsOneWidget);
     });
+
+    testWidgets('SDLC Coverage explanation describes read-only team aggregation', (tester) async {
+      final teamNotifier = TeamNotifier.forTesting(
+        aggregateCoverageDomains: [],
+        aggregateMemberCount: 1,
+      );
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => DashboardNotifier.forTesting()),
+            ChangeNotifierProvider.value(value: teamNotifier),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: TeamRadarTab()),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('How to Read — SDLC Coverage'), findsOneWidget);
+      expect(
+        find.text(
+          'SDLC Coverage is a read-only view of how the team uses agents across the software development lifecycle. '
+          'The bars reflect the average involvement across the team’s latest submissions, not the current user’s local matrix. '
+          'Update coverage in the SDLC Matrix tab and tap Submit to refresh this view.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Click a lifecycle bar to cycle agent use'), findsNothing);
+    });
   });
 
   group('AppShell', () {
@@ -214,18 +246,18 @@ void main() {
         token: 'fake-token',
       );
 
-      await tester.binding.setSurfaceSize(const Size(400, 800));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-
       await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider.value(value: authNotifier),
-            ChangeNotifierProvider(create: (_) => DashboardNotifier.forTesting()),
-            ChangeNotifierProvider(create: (_) => TeamNotifier.forTesting()),
-          ],
-          child: const MaterialApp(
-            home: Scaffold(body: AppShell()),
+        MediaQuery(
+          data: const MediaQueryData(size: Size(400, 1200)),
+          child: MultiProvider(
+            providers: [
+              ChangeNotifierProvider.value(value: authNotifier),
+              ChangeNotifierProvider(create: (_) => DashboardNotifier.forTesting()),
+              ChangeNotifierProvider(create: (_) => TeamNotifier.forTesting()),
+            ],
+            child: const MaterialApp(
+              home: Scaffold(body: AppShell()),
+            ),
           ),
         ),
       );
@@ -233,9 +265,92 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('SDLC Matrix'), findsOneWidget);
+      expect(find.text('SDLC Application'), findsNothing);
+      expect(find.byType(DropdownButton<int>), findsOneWidget);
+
+      // Open the dropdown and verify all three tab labels are available.
+      await tester.tap(find.byType(DropdownButton<int>));
+      await tester.pumpAndSettle();
       expect(find.text('Team Capabilities'), findsOneWidget);
       expect(find.text('Profile Insights'), findsOneWidget);
-      expect(find.text('SDLC Application'), findsNothing);
+    });
+
+    testWidgets('header stacks title and user menu vertically on narrow viewport', (tester) async {
+      final authNotifier = AuthNotifier.forTesting(
+        user: const GitHubUser(
+          login: 'testuser',
+          name: 'Test User',
+          email: 'testuser@example.com',
+          avatarUrl: '',
+        ),
+        token: 'fake-token',
+      );
+
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(size: Size(375, 1200)),
+          child: MultiProvider(
+            providers: [
+              ChangeNotifierProvider.value(value: authNotifier),
+              ChangeNotifierProvider(create: (_) => DashboardNotifier.forTesting()),
+              ChangeNotifierProvider(create: (_) => TeamNotifier.forTesting()),
+            ],
+            child: const MaterialApp(
+              home: Scaffold(body: AppShell()),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      final titleFinder = find.text('Agentic Engineering Capability Profile');
+      final menuFinder = find.byType(PopupMenuButton<void>);
+      expect(titleFinder, findsOneWidget);
+      expect(menuFinder, findsOneWidget);
+
+      final titleOffset = tester.getTopLeft(titleFinder);
+      final menuOffset = tester.getTopLeft(menuFinder);
+      expect(menuOffset.dy, greaterThan(titleOffset.dy));
+    });
+
+    testWidgets('header keeps title and user menu horizontal on wide viewport', (tester) async {
+      final authNotifier = AuthNotifier.forTesting(
+        user: const GitHubUser(
+          login: 'testuser',
+          name: 'Test User',
+          email: 'testuser@example.com',
+          avatarUrl: '',
+        ),
+        token: 'fake-token',
+      );
+
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(size: Size(800, 800)),
+          child: MultiProvider(
+            providers: [
+              ChangeNotifierProvider.value(value: authNotifier),
+              ChangeNotifierProvider(create: (_) => DashboardNotifier.forTesting()),
+              ChangeNotifierProvider(create: (_) => TeamNotifier.forTesting()),
+            ],
+            child: const MaterialApp(
+              home: Scaffold(body: AppShell()),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      final titleFinder = find.text('Agentic Engineering Capability Profile');
+      final menuFinder = find.byType(PopupMenuButton<void>);
+      expect(titleFinder, findsOneWidget);
+      expect(menuFinder, findsOneWidget);
+
+      final titleOffset = tester.getTopLeft(titleFinder);
+      final menuOffset = tester.getTopLeft(menuFinder);
+      expect(menuOffset.dy, equals(titleOffset.dy));
     });
   });
 }

@@ -88,9 +88,12 @@ class _TeamRadarTabState extends State<TeamRadarTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          HowToReadCard(
+          const HowToReadCard(
             title: 'How to Read — SDLC Coverage',
-            text: data.applicationHowToRead,
+            text:
+                'SDLC Coverage is a read-only view of how the team uses agents across the software development lifecycle. '
+                'The bars reflect the average involvement across the team’s latest submissions, not the current user’s local matrix. '
+                'Update coverage in the SDLC Matrix tab and tap Submit to refresh this view.',
           ),
           const SizedBox(height: 20),
           ApplicationCoverageCard(

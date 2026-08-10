@@ -185,19 +185,35 @@ class _AppShellState extends State<AppShell> with SingleTickerProviderStateMixin
       ],
     );
 
-    final header = Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Header(
-            title: data.title,
-            subtitle: data.subtitle,
-          ),
-        ),
-        const SizedBox(width: 16),
-        const UserMenu(),
-      ],
-    );
+    final isSmallScreen = width <= 600;
+    final header = isSmallScreen
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Header(
+                title: data.title,
+                subtitle: data.subtitle,
+              ),
+              const SizedBox(height: 12),
+              const Align(
+                alignment: Alignment.centerRight,
+                child: UserMenu(),
+              ),
+            ],
+          )
+        : Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Header(
+                  title: data.title,
+                  subtitle: data.subtitle,
+                ),
+              ),
+              const SizedBox(width: 16),
+              const UserMenu(),
+            ],
+          );
 
     return Center(
       child: ConstrainedBox(
