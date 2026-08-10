@@ -19,6 +19,19 @@ class SDLCTab extends StatelessWidget {
     final token = auth.token;
     final isAuthenticated = auth.isLoggedIn && token != null;
 
+    if (notifier.loadingLatest) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Loading your latest submission...'),
+          ],
+        ),
+      );
+    }
+
     final matrix = CapabilityApplicationMatrix(
       dimensions: data.dimensions,
       domains: data.applicationDomains,
@@ -40,12 +53,45 @@ class SDLCTab extends StatelessWidget {
       text: data.applicationMatrixHowToRead,
     );
 
+    final latestError = notifier.latestError;
+    final errorBanner = latestError != null
+        ? Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF2F2),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFFECACA)),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  color: Color(0xFFDC2626),
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    latestError,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF991B1B),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )
+        : const SizedBox.shrink();
+
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           applicationMatrixHowToRead,
           const SizedBox(height: 20),
+          errorBanner,
+          if (latestError != null) const SizedBox(height: 16),
           matrix,
         ],
       ),

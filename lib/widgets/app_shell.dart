@@ -36,12 +36,14 @@ class _AppShellState extends State<AppShell> with SingleTickerProviderStateMixin
   void didChangeDependencies() {
     super.didChangeDependencies();
     final auth = context.read<AuthNotifier>();
+    final dashboardNotifier = context.read<DashboardNotifier>();
     final teamNotifier = context.read<TeamNotifier>();
     final token = auth.token;
     // Defer the fetch to avoid notifying listeners during the build phase.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (token != null && token.isNotEmpty) {
+        dashboardNotifier.loadLatestSubmission(token);
         teamNotifier.fetchTeamData(token);
       } else {
         teamNotifier.clear();

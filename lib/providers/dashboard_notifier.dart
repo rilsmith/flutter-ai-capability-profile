@@ -17,19 +17,25 @@ import '../utils/migrate_application_domains.dart';
 
 class DashboardNotifier extends ChangeNotifier {
   DashboardNotifier({http.Client? httpClient})
-      : _httpClient = httpClient ?? http.Client() {
+      : _httpClient = httpClient ?? http.Client(),
+        _skipApiCalls = false {
     debugPrint('DashboardNotifier: Constructor started');
     _load();
   }
 
   /// Testing-only constructor that skips async SharedPreferences loading and
-  /// uses the default dashboard data immediately.
-  DashboardNotifier.forTesting({http.Client? httpClient})
+  /// uses the default dashboard data immediately. It also skips authenticated
+  /// API calls unless a real HTTP client is provided.
+  DashboardNotifier.forTesting({http.Client? httpClient, bool skipApiCalls = true})
       : _data = defaultDashboardData,
         _httpClient = httpClient ?? http.Client(),
-        _initialized = true;
+        _initialized = true,
+        _loadingLatest = false,
+        _latestLoaded = skipApiCalls,
+        _skipApiCalls = skipApiCalls;
 
   final http.Client _httpClient;
+  final bool _skipApiCalls;
   DashboardData _data = defaultDashboardData;
   bool _initialized = false;
   Timer? _persistTimer;
@@ -38,12 +44,19 @@ class DashboardNotifier extends ChangeNotifier {
   bool _submitting = false;
   String? _submitSuccess;
   String? _submitError;
+  bool _loadingLatest = false;
+  String? _latestError;
+  bool _latestLoaded = false;
+  String? _lastLatestToken;
 
   DashboardData get data => _data;
   bool get initialized => _initialized;
   bool get submitting => _submitting;
   String? get submitSuccess => _submitSuccess;
   String? get submitError => _submitError;
+  bool get loadingLatest => _loadingLatest;
+  String? get latestError => _latestError;
+  bool get latestLoaded => _latestLoaded;
 
   /// Dimensions with in-flight radar drag score overlaid (no persistence).
   List<Dimension> get effectiveDimensions {
@@ -340,6 +353,76 @@ class DashboardNotifier extends ChangeNotifier {
       _submitError = 'Submission failed: $e';
     } finally {
       _submitting = false;
+      notifyListeners();
+    }
+  }
+
+  /// Fetch the authenticated user's latest submission from the backend and
+  /// populate the SDLC matrix.
+  ///
+  /// A 404 response means the user has never submitted and is treated as an
+  /// empty submission, falling back to the default matrix state without an
+  /// error. Any other failure shows an error message and leaves the matrix
+  /// editable with the default state.
+  ///
+  /// Calls are skipped when the same [token] has already been loaded unless
+  /// [force] is true. The test constructor skips API calls entirely.
+  Future<void> loadLatestSubmission(String token, {bool force = false}) async {
+    if (_skipApiCalls) {
+      _latestLoaded = true;
+      return;
+    }
+    if (!force && _lastLatestToken == token && _latestLoaded) return;
+
+    _lastLatestToken = token;
+    _loadingLatest = true;
+    _latestError = null;
+    notifyListeners();
+
+    try {
+      final origin = kIsWeb ? Uri.base.origin : 'http://localhost:5000';
+      final response = await _httpClient
+          .get(
+            Uri.parse('$origin/api/submissions/me'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 404) {
+        _data = defaultDashboardData;
+        await _persist();
+        _latestLoaded = true;
+      } else if (response.statusCode == 200) {
+        final result = jsonDecode(response.body) as Map<String, dynamic>;
+        final payload = result['payload'] as Map<String, dynamic>?;
+        if (payload != null) {
+          _data = DashboardData.fromJson(payload);
+          await _persist();
+        }
+        _latestLoaded = true;
+      } else {
+        String message;
+        try {
+          final error = jsonDecode(response.body) as Map<String, dynamic>;
+          message = error['error'] as String? ??
+              'Failed to load latest submission (${response.statusCode})';
+        } catch (_) {
+          message = 'Failed to load latest submission (${response.statusCode})';
+        }
+        _latestError = message;
+        _data = defaultDashboardData;
+      }
+    } on TimeoutException {
+      _latestError = 'Loading latest submission timed out. Please try again.';
+      _data = defaultDashboardData;
+    } catch (e) {
+      _latestError = 'Failed to load latest submission: $e';
+      _data = defaultDashboardData;
+    } finally {
+      _loadingLatest = false;
       notifyListeners();
     }
   }
