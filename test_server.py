@@ -214,6 +214,96 @@ def test_unknown_api_path_returns_404_json(client):
     assert resp.json == {"error": "Not found"}
 
 
+# ── GitHub email verification flag ───────────────────────────────────────────
+
+
+def _github_user_test():
+    return {"login": "testuser", "name": "Test User", "avatar_url": ""}
+
+
+def _github_emails_unverified_primary():
+    return [{"email": "testuser@example.com", "primary": True, "verified": False}]
+
+
+def test_derive_identity_rejects_unverified_primary_email_by_default(monkeypatch):
+    monkeypatch.delenv("ALLOW_UNVERIFIED_TEST_EMAIL", raising=False)
+    monkeypatch.setattr(server_module, "_github_user", lambda _token: _github_user_test())
+    monkeypatch.setattr(
+        server_module, "_github_emails", lambda _token: _github_emails_unverified_primary()
+    )
+    with pytest.raises(server_module.AuthError, match="No verified primary email"):
+        server_module._derive_identity("token")
+
+
+def test_derive_identity_accepts_unverified_primary_email_when_flag_enabled(monkeypatch):
+    monkeypatch.setenv("ALLOW_UNVERIFIED_TEST_EMAIL", "true")
+    monkeypatch.setattr(server_module, "_github_user", lambda _token: _github_user_test())
+    monkeypatch.setattr(
+        server_module, "_github_emails", lambda _token: _github_emails_unverified_primary()
+    )
+    identity = server_module._derive_identity("token")
+    assert identity["email"] == "testuser@example.com"
+    assert identity["uid"] == "testuser"
+    assert identity["name"] == "Test User"
+
+
+def test_derive_identity_prefers_verified_email_over_unverified_primary(monkeypatch):
+    monkeypatch.setenv("ALLOW_UNVERIFIED_TEST_EMAIL", "true")
+    monkeypatch.setattr(server_module, "_github_user", lambda _token: _github_user_test())
+    monkeypatch.setattr(
+        server_module,
+        "_github_emails",
+        lambda _token: [
+            {"email": "other@example.com", "primary": True, "verified": False},
+            {"email": "verified@example.com", "primary": False, "verified": True},
+        ],
+    )
+    identity = server_module._derive_identity("token")
+    assert identity["email"] == "verified@example.com"
+    assert identity["uid"] == "verified"
+
+
+def test_post_submission_rejects_unverified_email_by_default(client, monkeypatch):
+    monkeypatch.delenv("ALLOW_UNVERIFIED_TEST_EMAIL", raising=False)
+    monkeypatch.setattr(server_module, "_github_user", lambda _token: _github_user_test())
+    monkeypatch.setattr(
+        server_module, "_github_emails", lambda _token: _github_emails_unverified_primary()
+    )
+    monkeypatch.setattr(
+        server_module,
+        "_get_manager",
+        lambda _uid: {"manager_uid": "jbellows", "department_number": "12345"},
+    )
+    resp = client.post(
+        "/api/submissions",
+        json=_sample_payload(),
+        headers={"Authorization": "Bearer unverified_token"},
+    )
+    assert resp.status_code == 401
+    assert "No verified primary email" in resp.json["error"]
+
+
+def test_post_submission_accepts_unverified_email_when_flag_enabled(client, monkeypatch):
+    monkeypatch.setenv("ALLOW_UNVERIFIED_TEST_EMAIL", "true")
+    monkeypatch.setattr(server_module, "_github_user", lambda _token: _github_user_test())
+    monkeypatch.setattr(
+        server_module, "_github_emails", lambda _token: _github_emails_unverified_primary()
+    )
+    monkeypatch.setattr(
+        server_module,
+        "_get_manager",
+        lambda _uid: {"manager_uid": "jbellows", "department_number": "12345"},
+    )
+    resp = client.post(
+        "/api/submissions",
+        json=_sample_payload(),
+        headers={"Authorization": "Bearer unverified_token"},
+    )
+    assert resp.status_code == 201
+    assert "id" in resp.json
+    assert "submitted_at" in resp.json
+
+
 # ── Submissions API ───────────────────────────────────────────────────────────
 
 

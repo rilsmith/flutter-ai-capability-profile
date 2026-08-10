@@ -137,6 +137,7 @@ def test_derive_identity_falls_back_to_any_verified_email(monkeypatch):
 
 
 def test_derive_identity_raises_when_no_verified_email(monkeypatch):
+    monkeypatch.delenv("ALLOW_UNVERIFIED_TEST_EMAIL", raising=False)
     user = {"login": "rilsmith", "name": "Riley Smith", "avatar_url": ""}
     emails = [
         {"email": "rilsmith@example.com", "primary": True, "verified": False},

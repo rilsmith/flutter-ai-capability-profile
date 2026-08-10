@@ -221,6 +221,10 @@ def _derive_identity(token: str) -> dict:
     )
     if primary is None:
         primary = next((e for e in emails if e.get("verified")), None)
+    if primary is None and os.environ.get("ALLOW_UNVERIFIED_TEST_EMAIL", "") == "true":
+        # Local-dev-only escape hatch: accept an unverified primary email for
+        # testing with tokens that do not have a verified email on file.
+        primary = next((e for e in emails if e.get("primary")), None)
     if primary is None:
         raise AuthError("No verified primary email found for this GitHub account")
 
