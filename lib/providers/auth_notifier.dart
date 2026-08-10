@@ -37,14 +37,8 @@ class GitHubUser {
 }
 
 class AuthNotifier extends ChangeNotifier {
-  static const _clientId = String.fromEnvironment(
-    'GITHUB_CLIENT_ID',
-    defaultValue: '',
-  );
-  static const _redirectUri = String.fromEnvironment(
-    'REDIRECT_URI',
-    defaultValue: '',
-  );
+  static const _clientId = String.fromEnvironment('GITHUB_CLIENT_ID');
+  static const _redirectUri = String.fromEnvironment('REDIRECT_URI');
   static const _allowUnverifiedTestEmail = bool.fromEnvironment(
     'ALLOW_UNVERIFIED_TEST_EMAIL',
     defaultValue: false,

@@ -94,9 +94,7 @@ class _TeamRadarTabState extends State<TeamRadarTab> {
           ),
           const SizedBox(height: 20),
           ApplicationCoverageCard(
-            domains: teamNotifier.aggregateCoverageDomains.isNotEmpty
-                ? teamNotifier.aggregateCoverageDomains
-                : data.applicationDomains,
+            domains: teamNotifier.aggregateCoverageDomains,
             onCycleInvolvement: null,
             onSelectDomain: null,
           ),
