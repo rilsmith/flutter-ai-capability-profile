@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../providers/auth_notifier.dart';
 import '../providers/dashboard_notifier.dart';
+import '../providers/team_notifier.dart';
 import '../theme/dashboard_theme.dart';
-import 'edit_panel.dart';
 import 'header.dart';
 import 'profile_tab.dart';
 import 'sdlc_tab.dart';
@@ -17,9 +18,6 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> with SingleTickerProviderStateMixin {
-  bool _editing = false;
-  int? _selectedDimensionId;
-  int? _selectedDomainId;
   late TabController _tabController;
 
   @override
@@ -34,32 +32,31 @@ class _AppShellState extends State<AppShell> with SingleTickerProviderStateMixin
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final auth = context.read<AuthNotifier>();
+    final teamNotifier = context.read<TeamNotifier>();
+    final token = auth.token;
+    // Defer the fetch to avoid notifying listeners during the build phase.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (token != null && token.isNotEmpty) {
+        teamNotifier.fetchTeamData(token);
+      } else {
+        teamNotifier.clear();
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
   }
 
-  void _toggleEdit() {
-    setState(() {
-      _editing = !_editing;
-      if (!_editing) {
-        _selectedDimensionId = null;
-        _selectedDomainId = null;
-      }
-    });
-  }
-
-  void _selectDimension(int? id) {
-    setState(() => _selectedDimensionId = id);
-  }
-
-  void _selectDomain(int? id) {
-    setState(() => _selectedDomainId = id);
-  }
-
   Widget _buildNarrowTabBar() {
-    final labels = ['Team Capabilities', 'SDLC Application', 'Profile Insights'];
-    final icons = [Icons.radar, Icons.grid_view, Icons.insights];
+    final labels = ['SDLC Matrix', 'Team Capabilities', 'Profile Insights'];
+    final icons = [Icons.grid_view, Icons.radar, Icons.insights];
     final currentIndex = _tabController.index;
 
     return Padding(
@@ -102,7 +99,6 @@ class _AppShellState extends State<AppShell> with SingleTickerProviderStateMixin
     final notifier = context.watch<DashboardNotifier>();
     final data = notifier.data;
     final width = MediaQuery.sizeOf(context).width;
-    final stackEditPanel = width <= 1300;
     final useTabMenu = width <= 500;
 
     final tabContent = Column(
@@ -127,9 +123,9 @@ class _AppShellState extends State<AppShell> with SingleTickerProviderStateMixin
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.radar, size: 18),
+                          Icon(Icons.grid_view, size: 18),
                           SizedBox(width: 8),
-                          Text('Team Capabilities'),
+                          Text('SDLC Matrix'),
                         ],
                       ),
                     ),
@@ -137,9 +133,9 @@ class _AppShellState extends State<AppShell> with SingleTickerProviderStateMixin
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.grid_view, size: 18),
+                          Icon(Icons.radar, size: 18),
                           SizedBox(width: 8),
-                          Text('SDLC Application'),
+                          Text('Team Capabilities'),
                         ],
                       ),
                     ),
@@ -159,17 +155,14 @@ class _AppShellState extends State<AppShell> with SingleTickerProviderStateMixin
         Expanded(
           child: TabBarView(
             controller: _tabController,
-            children: [
+            children: const [
               Padding(
                 padding: EdgeInsets.only(top: 20),
-                child: TeamRadarTab(),
+                child: SDLCTab(),
               ),
               Padding(
                 padding: EdgeInsets.only(top: 20),
-                child: SDLCTab(
-                  selectedDomainId: _selectedDomainId,
-                  onSelectDomain: _selectDomain,
-                ),
+                child: TeamRadarTab(),
               ),
               Padding(
                 padding: EdgeInsets.only(top: 20),
@@ -184,46 +177,7 @@ class _AppShellState extends State<AppShell> with SingleTickerProviderStateMixin
     final header = Header(
       title: data.title,
       subtitle: data.subtitle,
-      editing: _editing,
-      onToggleEdit: _toggleEdit,
-      onExport: notifier.exportJson,
-      onImport: notifier.importJson,
-      onReset: notifier.resetToDefaults,
     );
-
-    final editPanel = EditPanel(
-      fullWidth: stackEditPanel,
-      selectedDimensionId: _selectedDimensionId,
-      selectedDomainId: _selectedDomainId,
-      onSelectDimension: (id) => _selectDimension(id),
-      onSelectDomain: (id) => _selectDomain(id),
-      onClose: _toggleEdit,
-    );
-
-    final body = stackEditPanel
-        ? Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (_editing) ...[
-                editPanel,
-                const SizedBox(height: 24),
-              ],
-              Expanded(child: tabContent),
-            ],
-          )
-        : Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (_editing) ...[
-                SizedBox(
-                  width: 360,
-                  child: editPanel,
-                ),
-                const SizedBox(width: 24),
-              ],
-              Expanded(child: tabContent),
-            ],
-          );
 
     return Center(
       child: ConstrainedBox(
@@ -234,12 +188,69 @@ class _AppShellState extends State<AppShell> with SingleTickerProviderStateMixin
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               header,
-              const SizedBox(height: 20),
-              Expanded(child: body),
+              const SizedBox(height: 8),
+              const _UserBar(),
+              const SizedBox(height: 12),
+              Expanded(child: tabContent),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+class _UserBar extends StatelessWidget {
+  const _UserBar();
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthNotifier>();
+    final user = auth.user;
+    if (user == null) return const SizedBox.shrink();
+    final ldap = auth.ldapInfo;
+
+    return Row(
+      children: [
+        CircleAvatar(
+          radius: 14,
+          backgroundImage:
+              user.avatarUrl.isNotEmpty ? NetworkImage(user.avatarUrl) : null,
+          child: user.avatarUrl.isEmpty
+              ? Text(user.name.isNotEmpty ? user.name[0] : '?')
+              : null,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          user.name,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: DashboardTheme.body,
+          ),
+        ),
+        if (ldap != null && ldap.manager.isNotEmpty) ...[
+          const SizedBox(width: 6),
+          const Text('·', style: TextStyle(color: DashboardTheme.subtle)),
+          const SizedBox(width: 6),
+          const Text('Manager: ',
+              style: TextStyle(fontSize: 13, color: DashboardTheme.muted)),
+          Text(
+            ldap.manager,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: DashboardTheme.body,
+            ),
+          ),
+        ],
+        const Spacer(),
+        TextButton.icon(
+          onPressed: () => context.read<AuthNotifier>().logout(),
+          icon: const Icon(Icons.logout, size: 16),
+          label: const Text('Sign out'),
+          style: TextButton.styleFrom(foregroundColor: DashboardTheme.muted),
+        ),
+      ],
     );
   }
 }

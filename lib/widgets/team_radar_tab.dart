@@ -1,13 +1,16 @@
 import 'dart:math' as math;
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/individual_profile.dart';
+import '../models/team_profile.dart';
+import '../providers/auth_notifier.dart';
 import '../providers/dashboard_notifier.dart';
 import '../providers/team_notifier.dart';
 import '../theme/dashboard_theme.dart';
+import 'application_coverage_card.dart';
+import 'how_to_read_card.dart';
 import 'interactive_radar_chart.dart';
 
 class TeamRadarTab extends StatefulWidget {
@@ -18,9 +21,8 @@ class TeamRadarTab extends StatefulWidget {
 }
 
 class _TeamRadarTabState extends State<TeamRadarTab> {
-  int? _selectedDimensionId;
   int? _selectedMemberIndex;
-  final _nameController = TextEditingController();
+
   final _memberColors = [
     const Color(0xFF7C3AED),
     const Color(0xFFDB2777),
@@ -33,12 +35,6 @@ class _TeamRadarTabState extends State<TeamRadarTab> {
     const Color(0xFF2563EB),
     const Color(0xFF9333EA),
   ];
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    super.dispose();
-  }
 
   void _toggleMember(int index) {
     setState(() {
@@ -80,12 +76,8 @@ class _TeamRadarTabState extends State<TeamRadarTab> {
       dimensions: mainDimensions,
       maxScore: data.maxScore,
       editing: false,
-      selectedDimensionId: _selectedDimensionId,
-      onSelectDimension: (id) {
-        setState(() {
-          _selectedDimensionId = _selectedDimensionId == id ? null : id;
-        });
-      },
+      selectedDimensionId: null,
+      onSelectDimension: null,
       teamMembers: profile.members,
       teamMins: teamMins,
       teamMaxs: teamMaxs,
@@ -96,26 +88,39 @@ class _TeamRadarTabState extends State<TeamRadarTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          HowToReadCard(
+            title: 'How to Read — SDLC Coverage',
+            text: data.applicationHowToRead,
+          ),
+          const SizedBox(height: 20),
+          ApplicationCoverageCard(
+            domains: teamNotifier.aggregateCoverageDomains.isNotEmpty
+                ? teamNotifier.aggregateCoverageDomains
+                : data.applicationDomains,
+            onCycleInvolvement: null,
+            onSelectDomain: null,
+          ),
+          const SizedBox(height: 20),
           _buildHeader(context, profile),
           const SizedBox(height: 20),
-          if (profile.members.isEmpty)
-            _buildEmptyState(context, teamNotifier, data.dimensions)
+          if (teamNotifier.loading)
+            const Center(child: CircularProgressIndicator())
+          else if (teamNotifier.error != null)
+            _buildErrorState(context, teamNotifier)
+          else if (profile.members.isEmpty)
+            _buildEmptyState(context)
           else
-            _buildRadarSection(
-              chart,
-              sideBySide,
-              width,
-            ),
-          const SizedBox(height: 20),
-          _buildMemberManagement(context, teamNotifier, data.dimensions, width),
-          const SizedBox(height: 20),
-          _buildCsvSection(context, teamNotifier, data.dimensions),
+            _buildRadarSection(chart, sideBySide, width),
+          if (profile.members.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            _buildMemberList(context, profile),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildHeader(BuildContext context, dynamic profile) {
+  Widget _buildHeader(BuildContext context, TeamProfile profile) {
     final selectedName = _selectedMemberIndex != null &&
             _selectedMemberIndex! < profile.members.length
         ? profile.members[_selectedMemberIndex!].name
@@ -125,10 +130,10 @@ class _TeamRadarTabState extends State<TeamRadarTab> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          profile.members.isEmpty
-              ? 'Team Radar'
-              : selectedName != null
-                  ? '$selectedName — Individual View'
+          selectedName != null
+              ? '$selectedName — Individual View'
+              : profile.members.isEmpty
+                  ? 'Team Radar'
                   : 'Team Radar — ${profile.members.length} ${profile.members.length == 1 ? 'member' : 'members'}',
           style: const TextStyle(
             fontSize: 20,
@@ -140,9 +145,7 @@ class _TeamRadarTabState extends State<TeamRadarTab> {
         Text(
           selectedName != null
               ? 'Showing $selectedName\'s scores. Click other member names to compare, or click again to return to team average.'
-              : profile.members.isEmpty
-                  ? 'Add team members to see aggregate capability scores.'
-                  : 'The polygon shows the team average. Click a member name to view their individual scores. The shaded band shows the min-max range; colored dots show each member on every axis.',
+              : 'The polygon shows the team average. Click a member name to view their individual scores. The shaded band shows the min-max range; colored dots show each member on every axis.',
           style: const TextStyle(fontSize: 13, color: DashboardTheme.muted),
         ),
         if (profile.members.length > 1 && selectedName == null)
@@ -183,25 +186,68 @@ class _TeamRadarTabState extends State<TeamRadarTab> {
     );
   }
 
-  Widget _buildEmptyState(
-    BuildContext context,
-    TeamNotifier teamNotifier,
-    List<dynamic> dimensions,
-  ) {
+  Widget _buildEmptyState(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(32),
       decoration: DashboardTheme.cardDecoration(),
       child: Column(
         children: [
-          const Icon(Icons.group_add, size: 48, color: DashboardTheme.subtle),
+          const Icon(Icons.group_outlined, size: 48, color: DashboardTheme.subtle),
           const SizedBox(height: 16),
-          const Text(
-            'Add team members to see aggregate capability scores',
+          Text(
+            'No team submissions yet',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 15, color: DashboardTheme.muted),
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: DashboardTheme.heading,
+            ),
           ),
-          const SizedBox(height: 20),
-          _buildAddMemberRow(context, teamNotifier),
+          const SizedBox(height: 8),
+          const Text(
+            'Team submissions from the SDLC Matrix tab will appear here once you and your teammates submit your matrices.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13, color: DashboardTheme.muted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState(BuildContext context, TeamNotifier teamNotifier) {
+    final auth = context.read<AuthNotifier>();
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: DashboardTheme.cardDecoration(),
+      child: Column(
+        children: [
+          const Icon(Icons.error_outline, size: 40, color: Colors.red),
+          const SizedBox(height: 12),
+          Text(
+            'Unable to load team data',
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: DashboardTheme.heading,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            teamNotifier.error!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 13, color: DashboardTheme.muted),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: () {
+              final token = auth.token;
+              if (token != null) {
+                teamNotifier.fetchTeamData(token, force: true);
+              }
+            },
+            icon: const Icon(Icons.refresh, size: 18),
+            label: const Text('Retry'),
+          ),
         ],
       ),
     );
@@ -238,15 +284,7 @@ class _TeamRadarTabState extends State<TeamRadarTab> {
     );
   }
 
-  Widget _buildMemberManagement(
-    BuildContext context,
-    TeamNotifier teamNotifier,
-    List<dynamic> dimensions,
-    double width,
-  ) {
-    final profile = teamNotifier.profile;
-    final narrow = width <= 700;
-
+  Widget _buildMemberList(BuildContext context, TeamProfile profile) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
       decoration: DashboardTheme.cardDecoration(),
@@ -275,476 +313,87 @@ class _TeamRadarTabState extends State<TeamRadarTab> {
             ],
           ),
           const SizedBox(height: 12),
-          _buildAddMemberRow(context, teamNotifier),
-          const SizedBox(height: 16),
-          if (profile.members.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Center(
-                child: Text(
-                  'No members yet. Add a member above or import a CSV.',
-                  style: TextStyle(fontSize: 13, color: DashboardTheme.muted),
-                ),
-              ),
-            )
-          else
-            ...List.generate(profile.members.length, (mi) {
-              final member = profile.members[mi];
-              final color = _memberColors[mi % _memberColors.length];
-              final isSelected = _selectedMemberIndex == mi;
-              return _MemberCard(
-                member: member,
-                index: mi,
-                color: color,
-                dimensions: dimensions,
-                maxScore: 5,
-                narrow: narrow,
-                isSelected: isSelected,
-                onToggle: () => _toggleMember(mi),
-                onRemove: () {
-                  if (_selectedMemberIndex == mi) {
-                    _selectedMemberIndex = null;
-                  }
-                  teamNotifier.removeMember(mi);
-                },
-                onUpdateName: (name) => teamNotifier.updateMemberName(mi, name),
-                onUpdateScore: (dimIdx, score) =>
-                    teamNotifier.updateMemberScore(mi, dimIdx, score),
-              );
-            }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAddMemberRow(BuildContext context, TeamNotifier teamNotifier) {
-    return Row(
-      children: [
-        Expanded(
-          child: TextField(
-            controller: _nameController,
-            decoration: InputDecoration(
-              hintText: 'Member name',
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: DashboardTheme.cardBorder),
-              ),
-            ),
-            onSubmitted: (value) {
-              if (value.trim().isNotEmpty) {
-                teamNotifier.addMember(value.trim());
-                _nameController.clear();
-              }
-            },
-          ),
-        ),
-        const SizedBox(width: 8),
-        ElevatedButton.icon(
-          onPressed: () {
-            if (_nameController.text.trim().isNotEmpty) {
-              teamNotifier.addMember(_nameController.text.trim());
-              _nameController.clear();
-            }
-          },
-          icon: const Icon(Icons.person_add, size: 18),
-          label: const Text('Add'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: DashboardTheme.primary,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCsvSection(
-    BuildContext context,
-    TeamNotifier teamNotifier,
-    List<dynamic> dimensions,
-  ) {
-    final dimNames = dimensions.map((d) => d.name).cast<String>().toList();
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
-      decoration: DashboardTheme.cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Import / Export',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: DashboardTheme.heading,
-            ),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Export team scores as CSV or import from a CSV file. Format: Name, followed by one column per capability dimension.',
-            style: TextStyle(fontSize: 13, color: DashboardTheme.muted),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              OutlinedButton.icon(
-                onPressed: () => _exportCsv(context, teamNotifier, dimNames),
-                icon: const Icon(Icons.download, size: 18),
-                label: const Text('Export CSV'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+          ...List.generate(profile.members.length, (mi) {
+            final member = profile.members[mi];
+            final color = _memberColors[mi % _memberColors.length];
+            final isSelected = _selectedMemberIndex == mi;
+            return InkWell(
+              onTap: () => _toggleMember(mi),
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? DashboardTheme.primaryLight
+                      : const Color(0xFFFAFAFA),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isSelected
+                        ? DashboardTheme.primary
+                        : const Color(0xFFF3F4F6),
+                    width: isSelected ? 1.5 : 1,
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              OutlinedButton.icon(
-                onPressed: () => _importCsv(context, teamNotifier, dimNames),
-                icon: const Icon(Icons.upload, size: 18),
-                label: const Text('Import CSV'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
                 ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _exportCsv(
-    BuildContext context,
-    TeamNotifier teamNotifier,
-    List<String> dimNames,
-  ) async {
-    try {
-      await teamNotifier.downloadCsv(dimNames);
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export cancelled or failed: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _importCsv(
-    BuildContext context,
-    TeamNotifier teamNotifier,
-    List<String> dimNames,
-  ) async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['csv'],
-      withData: true,
-    );
-
-    if (result == null || result.files.isEmpty) return;
-
-    final bytes = result.files.single.bytes;
-    if (bytes == null) return;
-
-    final outcome = await teamNotifier.importCsv(
-      bytes: bytes,
-      dimensionNames: dimNames,
-    );
-
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            outcome.success
-                ? 'Imported ${teamNotifier.memberCount} members'
-                : outcome.error ?? 'Import failed',
-          ),
-          backgroundColor:
-              outcome.success ? DashboardTheme.primary : Colors.red,
-        ),
-      );
-    }
-  }
-}
-
-class _MemberCard extends StatelessWidget {
-  const _MemberCard({
-    required this.member,
-    required this.index,
-    required this.color,
-    required this.dimensions,
-    required this.maxScore,
-    required this.narrow,
-    required this.isSelected,
-    required this.onToggle,
-    required this.onRemove,
-    required this.onUpdateName,
-    required this.onUpdateScore,
-  });
-
-  final IndividualProfile member;
-  final int index;
-  final Color color;
-  final List<dynamic> dimensions;
-  final int maxScore;
-  final bool narrow;
-  final bool isSelected;
-  final VoidCallback onToggle;
-  final VoidCallback onRemove;
-  final ValueChanged<String> onUpdateName;
-  final void Function(int dimIdx, double score) onUpdateScore;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: isSelected
-            ? DashboardTheme.primaryLight
-            : const Color(0xFFFAFAFA),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: isSelected
-              ? DashboardTheme.primary
-              : const Color(0xFFF3F4F6),
-          width: isSelected ? 1.5 : 1,
-        ),
-      ),
-      child: Column(
-        children: [
-          InkWell(
-            onTap: onToggle,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  Container(
-                    width: 12,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                      border: isSelected
-                          ? Border.all(color: Colors.white, width: 2)
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      member.name,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight:
-                            isSelected ? FontWeight.w700 : FontWeight.w600,
-                        color: isSelected
-                            ? DashboardTheme.primary
-                            : DashboardTheme.body,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                        border: isSelected
+                            ? Border.all(color: Colors.white, width: 2)
+                            : null,
                       ),
                     ),
-                  ),
-                  if (isSelected)
-                    const Padding(
-                      padding: EdgeInsets.only(right: 8),
-                      child: Icon(
-                        Icons.visibility,
-                        size: 16,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        member.name,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: isSelected
+                              ? FontWeight.w700
+                              : FontWeight.w600,
+                          color: isSelected
+                              ? DashboardTheme.primary
+                              : DashboardTheme.body,
+                        ),
+                      ),
+                    ),
+                    if (isSelected)
+                      const Padding(
+                        padding: EdgeInsets.only(right: 8),
+                        child: Icon(
+                          Icons.visibility,
+                          size: 16,
+                          color: DashboardTheme.primary,
+                        ),
+                      ),
+                    Text(
+                      member.scores.isEmpty
+                          ? ''
+                          : (member.scores.reduce((a, b) => a + b) /
+                                  member.scores.length)
+                              .toStringAsFixed(1),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
                         color: DashboardTheme.primary,
                       ),
                     ),
-                  Text(
-                    member.scores.isEmpty
-                        ? ''
-                        : (member.scores.reduce((a, b) => a + b) /
-                                member.scores.length)
-                            .toStringAsFixed(1),
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: DashboardTheme.primary,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: onRemove,
-                    child: const Icon(
-                      Icons.remove_circle_outline,
-                      size: 18,
-                      color: Colors.red,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ),
-          if (isSelected)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextField(
-                    decoration: const InputDecoration(
-                      labelText: 'Name',
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 8,
-                      ),
-                    ),
-                    controller: TextEditingController(text: member.name),
-                    onChanged: onUpdateName,
-                  ),
-                  const SizedBox(height: 12),
-                  if (narrow)
-                    for (var i = 0; i < dimensions.length; i++)
-                      _ScoreSlider(
-                        dimensionName: '${i + 1}. ${dimensions[i].name}',
-                        dimensionColor:
-                            DashboardTheme.parseHex(dimensions[i].color),
-                        score: i < member.scores.length
-                            ? member.scores[i]
-                            : 3.0,
-                        maxScore: maxScore,
-                        onChanged: (s) => onUpdateScore(i, s),
-                      )
-                  else
-                    ..._buildScoreRows(),
-                ],
-              ),
-            ),
+            );
+          }),
         ],
       ),
-    );
-  }
-
-  List<Widget> _buildScoreRows() {
-    final rows = <Widget>[];
-    final mid = (dimensions.length / 2).ceil();
-    for (var row = 0; row < mid; row++) {
-      final leftIdx = row;
-      final rightIdx = row + mid;
-      rows.add(
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: _ScoreSlider(
-                  dimensionName: '${leftIdx + 1}. ${dimensions[leftIdx].name}',
-                  dimensionColor: DashboardTheme.parseHex(
-                    dimensions[leftIdx].color,
-                  ),
-                  score: leftIdx < member.scores.length
-                      ? member.scores[leftIdx]
-                      : 3.0,
-                  maxScore: maxScore,
-                  onChanged: (s) => onUpdateScore(leftIdx, s),
-                ),
-              ),
-              const SizedBox(width: 16),
-              if (rightIdx < dimensions.length)
-                Expanded(
-                  child: _ScoreSlider(
-                    dimensionName:
-                        '${rightIdx + 1}. ${dimensions[rightIdx].name}',
-                    dimensionColor: DashboardTheme.parseHex(
-                      dimensions[rightIdx].color,
-                    ),
-                    score: rightIdx < member.scores.length
-                        ? member.scores[rightIdx]
-                        : 3.0,
-                    maxScore: maxScore,
-                    onChanged: (s) => onUpdateScore(rightIdx, s),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      );
-    }
-    return rows;
-  }
-}
-
-class _ScoreSlider extends StatelessWidget {
-  const _ScoreSlider({
-    required this.dimensionName,
-    required this.dimensionColor,
-    required this.score,
-    required this.maxScore,
-    required this.onChanged,
-  });
-
-  final String dimensionName;
-  final Color dimensionColor;
-  final double score;
-  final int maxScore;
-  final ValueChanged<double> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 8,
-          height: 8,
-          child: Container(
-            decoration: BoxDecoration(
-              color: dimensionColor,
-              shape: BoxShape.circle,
-            ),
-          ),
-        ),
-        const SizedBox(width: 6),
-        SizedBox(
-          width: 130,
-          child: Text(
-            dimensionName,
-            style: const TextStyle(fontSize: 11, color: DashboardTheme.body),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        Expanded(
-          child: Slider(
-            value: score,
-            min: 1,
-            max: maxScore.toDouble(),
-            divisions: (maxScore - 1) * 10,
-            activeColor: dimensionColor,
-            onChanged: onChanged,
-          ),
-        ),
-        SizedBox(
-          width: 32,
-          child: Text(
-            score.toStringAsFixed(1),
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: DashboardTheme.heading,
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

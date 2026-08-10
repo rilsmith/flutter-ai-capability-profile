@@ -2,218 +2,201 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 
+import '../models/application_domain.dart';
+import '../models/dimension.dart';
 import '../models/individual_profile.dart';
 import '../models/team_profile.dart';
-import '../utils/csv_download_web.dart'
-    if (dart.library.io) '../utils/csv_download_stub.dart';
 
-const _teamStorageKey = 'team-profile-data';
+class _AggregateDomain {
+  const _AggregateDomain({
+    required this.id,
+    required this.name,
+    required this.shortName,
+    required this.involvementAverage,
+    required this.inScopeCount,
+    required this.notApplicableCount,
+  });
+
+  factory _AggregateDomain.fromJson(Map<String, dynamic> json) {
+    return _AggregateDomain(
+      id: json['id'] as int,
+      name: json['name'] as String,
+      shortName: json['shortName'] as String,
+      involvementAverage: (json['involvement_average'] as num).toDouble(),
+      inScopeCount: json['in_scope_count'] as int? ?? 0,
+      notApplicableCount: json['not_applicable_count'] as int? ?? 0,
+    );
+  }
+
+  final int id;
+  final String name;
+  final String shortName;
+  final double involvementAverage;
+  final int inScopeCount;
+  final int notApplicableCount;
+}
 
 class TeamNotifier extends ChangeNotifier {
   TeamNotifier() {
-    _load();
-  }
-
-  TeamProfile _profile = const TeamProfile();
-  bool _initialized = false;
-  Timer? _persistTimer;
-
-  TeamProfile get profile => _profile;
-  bool get initialized => _initialized;
-  int get memberCount => _profile.members.length;
-
-  @override
-  void dispose() {
-    _persistTimer?.cancel();
-    super.dispose();
-  }
-
-  void _schedulePersist() {
-    _persistTimer?.cancel();
-    _persistTimer = Timer(const Duration(milliseconds: 350), () {
-      unawaited(_persist());
-    });
-  }
-
-  Future<void> _load() async {
-    try {
-      final prefs = await SharedPreferences.getInstance().timeout(
-        const Duration(seconds: 5),
-        onTimeout: () => throw TimeoutException('SharedPreferences timeout'),
-      );
-      final raw = prefs.getString(_teamStorageKey);
-      if (raw != null) {
-        _profile = TeamProfile.fromJson(
-          jsonDecode(raw) as Map<String, dynamic>,
-        );
-      }
-    } catch (_) {
-      _profile = const TeamProfile();
-    }
     _initialized = true;
     notifyListeners();
   }
 
-  Future<void> _persist() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_teamStorageKey, jsonEncode(_profile.toJson()));
+  /// Testing-only constructor that bypasses backend calls and uses the provided
+  /// profile and aggregate domains directly.
+  TeamNotifier.forTesting({
+    TeamProfile? profile,
+    List<ApplicationDomain>? aggregateCoverageDomains,
+    int aggregateMemberCount = 0,
+  })  : _profile = profile ?? const TeamProfile(),
+        _aggregateDomains = [],
+        _aggregateDomainsOverride = aggregateCoverageDomains,
+        _aggregateMemberCount = aggregateMemberCount,
+        _initialized = true,
+        _loading = false {
+    // Avoid notifying during provider creation in widget tests.
   }
 
-  void addMember(String name) {
-    _profile = _profile.copyWith(
-      members: [
-        ..._profile.members,
-        IndividualProfile(name: name, scores: List.filled(9, 3.0)),
-      ],
-    );
-    notifyListeners();
-    _schedulePersist();
-  }
+  TeamProfile _profile = const TeamProfile();
+  bool _initialized = false;
+  List<ApplicationDomain>? _aggregateDomainsOverride;
+  bool _loading = false;
+  String? _error;
+  String? _lastToken;
+  bool _hasAttemptedFetch = false;
+  List<_AggregateDomain> _aggregateDomains = [];
+  int _aggregateMemberCount = 0;
 
-  void removeMember(int index) {
-    final updated = List<IndividualProfile>.from(_profile.members)..removeAt(index);
-    _profile = _profile.copyWith(members: updated);
-    notifyListeners();
-    _schedulePersist();
-  }
+  TeamProfile get profile => _profile;
+  bool get initialized => _initialized;
+  bool get loading => _loading;
+  String? get error => _error;
+  int get memberCount => _profile.members.length;
+  int get aggregateMemberCount => _aggregateMemberCount;
 
-  void updateMemberName(int index, String name) {
-    final updated = List<IndividualProfile>.from(_profile.members);
-    updated[index] = updated[index].copyWith(name: name);
-    _profile = _profile.copyWith(members: updated);
-    notifyListeners();
-    _schedulePersist();
-  }
-
-  void updateMemberScore(int index, int dimensionIndex, double score) {
-    final updated = List<IndividualProfile>.from(_profile.members);
-    final scores = List<double>.from(updated[index].scores);
-    scores[dimensionIndex] = score.clamp(1.0, 5.0);
-    updated[index] = updated[index].copyWith(scores: scores);
-    _profile = _profile.copyWith(members: updated);
-    notifyListeners();
-    _schedulePersist();
-  }
-
-  Future<void> resetToDefaults() async {
-    _profile = const TeamProfile();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_teamStorageKey);
-    notifyListeners();
-  }
-
-  String exportCsv(List<String> dimensionNames) {
-    final buffer = StringBuffer();
-    buffer.write('Name');
-    for (final name in dimensionNames) {
-      buffer.write(',$name');
+  /// Convert backend aggregate domains into [ApplicationDomain] objects for the
+  /// SDLC Coverage panel. Involvement is derived from the average involvement
+  /// score so the existing coverage visualization can render the team picture.
+  List<ApplicationDomain> get aggregateCoverageDomains {
+    if (_aggregateDomainsOverride != null) {
+      return _aggregateDomainsOverride!;
     }
-    buffer.writeln();
-
-    for (final member in _profile.members) {
-      buffer.write(_escapeCsvField(member.name));
-      for (final score in member.scores) {
-        buffer.write(',${score.toStringAsFixed(1)}');
-      }
-      buffer.writeln();
-    }
-
-    return buffer.toString();
-  }
-
-  Future<void> downloadCsv(List<String> dimensionNames) async {
-    final csv = exportCsv(dimensionNames);
-    await downloadCsvFile(csv, 'team-capability-scores.csv');
-  }
-
-  Future<({bool success, String? error})> importCsv({
-    required List<int> bytes,
-    required List<String> dimensionNames,
-  }) async {
-    try {
-      final text = utf8.decode(bytes);
-      final lines = text.split('\n').where((l) => l.trim().isNotEmpty).toList();
-
-      if (lines.length < 2) {
-        return (success: false, error: 'CSV must have a header row and at least one data row');
-      }
-
-      final expectedCount = 1 + dimensionNames.length;
-      final members = <IndividualProfile>[];
-
-      for (var i = 1; i < lines.length; i++) {
-        final fields = _parseCsvLine(lines[i]);
-        if (fields.length < expectedCount) {
-          return (
-            success: false,
-            error: 'Row ${i + 1}: expected $expectedCount fields, got ${fields.length}',
-          );
-        }
-
-        final name = fields[0].trim();
-        final scores = <double>[];
-        for (var j = 0; j < dimensionNames.length; j++) {
-          final parsed = double.tryParse(fields[j + 1].trim());
-          if (parsed == null) {
-            return (
-              success: false,
-              error: 'Row ${i + 1}: invalid score "${fields[j + 1]}" for "${dimensionNames[j]}"',
-            );
-          }
-          scores.add(parsed.clamp(1.0, 5.0));
-        }
-
-        members.add(IndividualProfile(name: name, scores: scores));
-      }
-
-      _profile = _profile.copyWith(members: members);
-      notifyListeners();
-      _schedulePersist();
-      return (success: true, error: null);
-    } catch (e) {
-      return (success: false, error: 'Failed to parse CSV: $e');
-    }
-  }
-
-  String _escapeCsvField(String value) {
-    if (value.contains(',') || value.contains('"') || value.contains('\n')) {
-      return '"${value.replaceAll('"', '""')}"';
-    }
-    return value;
-  }
-
-  List<String> _parseCsvLine(String line) {
-    final fields = <String>[];
-    var current = '';
-    var inQuotes = false;
-
-    for (var i = 0; i < line.length; i++) {
-      final char = line[i];
-      if (inQuotes) {
-        if (char == '"') {
-          if (i + 1 < line.length && line[i + 1] == '"') {
-            current += '"';
-            i++;
-          } else {
-            inQuotes = false;
-          }
-        } else {
-          current += char;
-        }
+    return _aggregateDomains.map((agg) {
+      final DomainInvolvement involvement;
+      if (agg.involvementAverage >= 1.5) {
+        involvement = DomainInvolvement.regular;
+      } else if (agg.involvementAverage >= 0.5) {
+        involvement = DomainInvolvement.occasional;
       } else {
-        if (char == '"') {
-          inQuotes = true;
-        } else if (char == ',') {
-          fields.add(current);
-          current = '';
-        } else {
-          current += char;
-        }
+        involvement = DomainInvolvement.none;
       }
+
+      final applicability =
+          agg.inScopeCount == 0 && agg.notApplicableCount > 0
+              ? DomainApplicability.notApplicable
+              : DomainApplicability.inScope;
+
+      return ApplicationDomain(
+        id: agg.id,
+        name: agg.name,
+        shortName: agg.shortName,
+        applicability: applicability,
+        involvement: involvement,
+        value: DomainSignal.low,
+        confidence: DomainSignal.low,
+        capabilityIds: const [],
+      );
+    }).toList();
+  }
+
+  /// Fetch the latest team submissions and aggregate data from the backend.
+  /// Calls are skipped when the same [token] has already been fetched unless
+  /// [force] is true.
+  Future<void> fetchTeamData(String token, {bool force = false}) async {
+    if (!force && _lastToken == token && _hasAttemptedFetch) return;
+
+    _lastToken = token;
+    _hasAttemptedFetch = true;
+    _loading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final origin = kIsWeb ? Uri.base.origin : 'http://localhost:5000';
+      final headers = {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      };
+
+      final teamResp = await http
+          .get(Uri.parse('$origin/api/submissions/team'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      if (teamResp.statusCode != 200) {
+        throw Exception(
+          'Failed to load team submissions (${teamResp.statusCode})',
+        );
+      }
+      final teamData = jsonDecode(teamResp.body) as Map<String, dynamic>;
+      final submissions = (teamData['submissions'] as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+
+      final aggResp = await http
+          .get(Uri.parse('$origin/api/submissions/team/aggregate'), headers: headers)
+          .timeout(const Duration(seconds: 15));
+      if (aggResp.statusCode != 200) {
+        throw Exception(
+          'Failed to load team aggregate (${aggResp.statusCode})',
+        );
+      }
+      final aggData = jsonDecode(aggResp.body) as Map<String, dynamic>;
+
+      _aggregateMemberCount = aggData['member_count'] as int? ?? 0;
+      _aggregateDomains = (aggData['domains'] as List<dynamic>? ?? [])
+          .map((e) => _AggregateDomain.fromJson(e as Map<String, dynamic>))
+          .toList();
+
+      final members = submissions.map((sub) {
+        final payload = sub['payload'] as Map<String, dynamic>;
+        final dims = (payload['dimensions'] as List<dynamic>? ?? [])
+            .map((d) => Dimension.fromJson(d as Map<String, dynamic>))
+            .toList();
+        final scores = dims.map((d) => d.score).toList();
+        while (scores.length < 5) {
+          scores.add(0.0);
+        }
+        final displayName = sub['user_display_name'] as String?;
+        final email = sub['user_email'] as String?;
+        final uid = sub['user_uid'] as String?;
+        final name = (displayName?.isNotEmpty == true)
+            ? displayName!
+            : (email?.isNotEmpty == true)
+                ? email!
+                : (uid?.isNotEmpty == true)
+                    ? uid!
+                    : 'Unknown';
+        return IndividualProfile(name: name, scores: scores);
+      }).toList();
+
+      _profile = TeamProfile(members: members);
+      _loading = false;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      _loading = false;
+      notifyListeners();
     }
-    fields.add(current);
-    return fields;
+  }
+
+  void clear() {
+    _profile = const TeamProfile();
+    _aggregateDomains = [];
+    _aggregateMemberCount = 0;
+    _lastToken = null;
+    _hasAttemptedFetch = false;
+    _error = null;
+    _loading = false;
+    notifyListeners();
   }
 }

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../models/application_domain.dart';
 import '../theme/dashboard_theme.dart';
@@ -177,7 +176,9 @@ class _Segment extends StatelessWidget {
                       Text(
                         isNa
                             ? 'N/A'
-                            : '${involvementLabel(domain.involvement)} · Value ${signalLabel(domain.value)}',
+                            : onCycleInvolvement == null
+                                ? involvementLabel(domain.involvement)
+                                : '${involvementLabel(domain.involvement)} · Value ${signalLabel(domain.value)}',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           fontSize: 10,

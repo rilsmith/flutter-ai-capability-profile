@@ -16,9 +16,15 @@ import '../utils/migrate_application_domains.dart';
 
 class DashboardNotifier extends ChangeNotifier {
   DashboardNotifier() {
-    print('DashboardNotifier: Constructor started');
+    debugPrint('DashboardNotifier: Constructor started');
     _load();
   }
+
+  /// Testing-only constructor that skips async SharedPreferences loading and
+  /// uses the default dashboard data immediately.
+  DashboardNotifier.forTesting()
+      : _data = defaultDashboardData,
+        _initialized = true;
 
   DashboardData _data = defaultDashboardData;
   bool _initialized = false;

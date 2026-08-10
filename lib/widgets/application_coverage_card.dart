@@ -70,29 +70,31 @@ class ApplicationCoverageCard extends StatelessWidget {
             spacing: 16,
             runSpacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center,
-            children: const [
+            children: [
               SizedBox(
                 width: double.infinity,
                 child: Text(
-                  'Click a bar to cycle agent use (Never → Occasional → Regular). Dashed border = involvement and capability links differ.',
-                  style: TextStyle(
+                  onCycleInvolvement == null
+                      ? 'Coverage is averaged across team submissions. Regular = frequent agent use, Occasional = periodic use, Never = no reported use, Not applicable = excluded from the team view.'
+                      : 'Click a bar to cycle agent use (Never → Occasional → Regular). Dashed border = involvement and capability links differ.',
+                  style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                     color: DashboardTheme.primary,
                   ),
                 ),
               ),
-              _LegendItem(color: DashboardTheme.primary, label: 'Regular'),
-              _LegendItem(
+              const _LegendItem(color: DashboardTheme.primary, label: 'Regular'),
+              const _LegendItem(
                 color: DashboardTheme.primary,
                 partial: true,
                 label: 'Occasional',
               ),
-              _LegendItem(
+              const _LegendItem(
                 color: Color(0xFFF9FAFB),
                 label: 'Never',
               ),
-              _LegendItem(
+              const _LegendItem(
                 color: Color(0xFFF3F4F6),
                 hatched: true,
                 label: 'Not applicable',
