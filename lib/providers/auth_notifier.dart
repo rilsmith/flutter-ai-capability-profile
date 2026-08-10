@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../utils/api_origin.dart';
 import '../utils/url_utils_stub.dart'
     if (dart.library.js_interop) '../utils/url_utils_web.dart';
 
@@ -258,8 +259,7 @@ class AuthNotifier extends ChangeNotifier {
     final uid = email.split('@').first.split('+').first;
     if (uid.isEmpty) return;
     try {
-      // Use a fixed origin so this works regardless of when Uri.base is sampled.
-      final origin = kIsWeb ? Uri.base.origin : 'http://localhost:5000';
+      final origin = apiOrigin();
       final uri = Uri.parse(
           '$origin/api/ldap?uid=${Uri.encodeComponent(uid)}');
       final resp = await http.get(uri);

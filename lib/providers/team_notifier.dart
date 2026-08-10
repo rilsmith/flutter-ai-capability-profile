@@ -8,6 +8,7 @@ import '../models/application_domain.dart';
 import '../models/dimension.dart';
 import '../models/individual_profile.dart';
 import '../models/team_profile.dart';
+import '../utils/api_origin.dart';
 
 class _AggregateDomain {
   const _AggregateDomain({
@@ -124,7 +125,7 @@ class TeamNotifier extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final origin = kIsWeb ? Uri.base.origin : 'http://localhost:5000';
+      final origin = apiOrigin();
       final headers = {
         'Authorization': 'Bearer $token',
         'Accept': 'application/json',

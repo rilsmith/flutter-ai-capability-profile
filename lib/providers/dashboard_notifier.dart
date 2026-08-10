@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/defaults.dart';
 import '../models/application_domain.dart';
 import '../models/dashboard_data.dart';
+import '../utils/api_origin.dart';
 import '../utils/application_sync.dart';
 import '../models/dimension.dart';
 import '../utils/json_export_web.dart'
@@ -311,7 +312,7 @@ class DashboardNotifier extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final origin = kIsWeb ? Uri.base.origin : 'http://localhost:5000';
+      final origin = apiOrigin();
       final response = await _httpClient
           .post(
             Uri.parse('$origin/api/submissions'),
@@ -383,7 +384,7 @@ class DashboardNotifier extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final origin = kIsWeb ? Uri.base.origin : 'http://localhost:5000';
+      final origin = apiOrigin();
       final response = await _httpClient
           .get(
             Uri.parse('$origin/api/submissions/me'),

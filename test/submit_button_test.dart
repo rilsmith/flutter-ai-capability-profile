@@ -136,6 +136,8 @@ void main() {
       expect(capturedRequest, isNotNull);
       expect(capturedRequest!.method, 'POST');
       expect(capturedRequest!.url.path, '/api/submissions');
+      expect(capturedRequest!.url.host, 'localhost');
+      expect(capturedRequest!.url.port, 5000);
       expect(capturedRequest!.headers['Authorization'], 'Bearer test-token');
       expect(capturedRequest!.headers['Content-Type'], 'application/json');
 
