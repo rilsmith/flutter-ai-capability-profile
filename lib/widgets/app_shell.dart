@@ -9,6 +9,7 @@ import 'header.dart';
 import 'profile_tab.dart';
 import 'sdlc_tab.dart';
 import 'team_radar_tab.dart';
+import 'user_menu.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -174,9 +175,18 @@ class _AppShellState extends State<AppShell> with SingleTickerProviderStateMixin
       ],
     );
 
-    final header = Header(
-      title: data.title,
-      subtitle: data.subtitle,
+    final header = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Header(
+            title: data.title,
+            subtitle: data.subtitle,
+          ),
+        ),
+        const SizedBox(width: 16),
+        const UserMenu(),
+      ],
     );
 
     return Center(
@@ -188,69 +198,12 @@ class _AppShellState extends State<AppShell> with SingleTickerProviderStateMixin
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               header,
-              const SizedBox(height: 8),
-              const _UserBar(),
               const SizedBox(height: 12),
               Expanded(child: tabContent),
             ],
           ),
         ),
       ),
-    );
-  }
-}
-class _UserBar extends StatelessWidget {
-  const _UserBar();
-
-  @override
-  Widget build(BuildContext context) {
-    final auth = context.watch<AuthNotifier>();
-    final user = auth.user;
-    if (user == null) return const SizedBox.shrink();
-    final ldap = auth.ldapInfo;
-
-    return Row(
-      children: [
-        CircleAvatar(
-          radius: 14,
-          backgroundImage:
-              user.avatarUrl.isNotEmpty ? NetworkImage(user.avatarUrl) : null,
-          child: user.avatarUrl.isEmpty
-              ? Text(user.name.isNotEmpty ? user.name[0] : '?')
-              : null,
-        ),
-        const SizedBox(width: 8),
-        Text(
-          user.name,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: DashboardTheme.body,
-          ),
-        ),
-        if (ldap != null && ldap.manager.isNotEmpty) ...[
-          const SizedBox(width: 6),
-          const Text('·', style: TextStyle(color: DashboardTheme.subtle)),
-          const SizedBox(width: 6),
-          const Text('Manager: ',
-              style: TextStyle(fontSize: 13, color: DashboardTheme.muted)),
-          Text(
-            ldap.manager,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: DashboardTheme.body,
-            ),
-          ),
-        ],
-        const Spacer(),
-        TextButton.icon(
-          onPressed: () => context.read<AuthNotifier>().logout(),
-          icon: const Icon(Icons.logout, size: 16),
-          label: const Text('Sign out'),
-          style: TextButton.styleFrom(foregroundColor: DashboardTheme.muted),
-        ),
-      ],
     );
   }
 }

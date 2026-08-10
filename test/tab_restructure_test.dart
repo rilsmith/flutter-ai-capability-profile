@@ -164,6 +164,29 @@ void main() {
       expect(find.text('SDLC Application'), findsNothing);
       expect(find.text('Actions'), findsNothing);
       expect(find.byIcon(Icons.more_vert), findsNothing);
+      expect(find.byType(PopupMenuButton<void>), findsOneWidget);
+    });
+
+    testWidgets('user menu is hidden when not authenticated', (tester) async {
+      final authNotifier = AuthNotifier.forTesting();
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: authNotifier),
+            ChangeNotifierProvider(create: (_) => DashboardNotifier.forTesting()),
+            ChangeNotifierProvider(create: (_) => TeamNotifier.forTesting()),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: AppShell()),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PopupMenuButton<void>), findsNothing);
+      expect(find.text('Sign out'), findsNothing);
     });
 
     testWidgets('narrow viewport uses dropdown tab selector', (tester) async {
