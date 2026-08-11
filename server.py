@@ -410,10 +410,17 @@ def _json_payload() -> dict:
     return body
 
 
-def _validate_type(value: Any, expected_type: type, path: str) -> None:
-    """Raise ValidationError if value is not of the expected type."""
-    if not isinstance(value, expected_type):
-        raise ValidationError(f"{path} must be a {expected_type.__name__}")
+def _validate_type(value: Any, expected_type: type | tuple[type, ...], path: str) -> None:
+    """Raise ValidationError if value is not one of the expected types.
+
+    Supports union types such as ``(int, float)`` and rejects booleans
+    when a numeric type is expected (bool is a subclass of int but is not a
+    meaningful score or tier threshold).
+    """
+    types = expected_type if isinstance(expected_type, tuple) else (expected_type,)
+    if not isinstance(value, types) or (isinstance(value, bool) and bool not in types):
+        type_names = " or ".join(t.__name__ for t in types)
+        raise ValidationError(f"{path} must be a {type_names}")
 
 
 def _validate_non_null_string(value: Any, path: str) -> None:

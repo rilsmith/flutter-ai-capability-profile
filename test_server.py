@@ -654,6 +654,76 @@ def test_post_submission_rejects_null_tier_label(client, monkeypatch):
     assert "label" in resp.json["error"].lower()
 
 
+def test_post_submission_rejects_non_numeric_dimension_score(client, monkeypatch):
+    _set_auth(monkeypatch)
+    payload = _sample_payload(
+        dimensions=[
+            {"id": 1, "name": "D1", "score": "not a number", "color": "#000", "descriptor": "D1"}
+        ]
+    )
+    resp = client.post(
+        "/api/submissions",
+        json=payload,
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 400
+    assert "score" in resp.json["error"].lower()
+    assert "int or float" in resp.json["error"].lower()
+
+
+def test_post_submission_rejects_boolean_dimension_score(client, monkeypatch):
+    _set_auth(monkeypatch)
+    payload = _sample_payload(
+        dimensions=[
+            {"id": 1, "name": "D1", "score": True, "color": "#000", "descriptor": "D1"}
+        ]
+    )
+    resp = client.post(
+        "/api/submissions",
+        json=payload,
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 400
+    assert "score" in resp.json["error"].lower()
+
+
+def test_post_submission_rejects_non_numeric_tier_min(client, monkeypatch):
+    _set_auth(monkeypatch)
+    payload = _sample_payload(
+        tiers={
+            "high": {"label": "", "color": "", "min": 4.0},
+            "medium": {"label": "", "color": "", "min": "not a number"},
+            "low": {"label": "", "color": "", "min": 1.0},
+        }
+    )
+    resp = client.post(
+        "/api/submissions",
+        json=payload,
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 400
+    assert "min" in resp.json["error"].lower()
+    assert "int or float" in resp.json["error"].lower()
+
+
+def test_post_submission_rejects_boolean_tier_min(client, monkeypatch):
+    _set_auth(monkeypatch)
+    payload = _sample_payload(
+        tiers={
+            "high": {"label": "", "color": "", "min": 4.0},
+            "medium": {"label": "", "color": "", "min": True},
+            "low": {"label": "", "color": "", "min": 1.0},
+        }
+    )
+    resp = client.post(
+        "/api/submissions",
+        json=payload,
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 400
+    assert "min" in resp.json["error"].lower()
+
+
 def test_post_submission_closes_db_connection(client, monkeypatch):
     """Connection leak fix: the endpoint must close the psycopg2 connection."""
     _set_auth(monkeypatch)
