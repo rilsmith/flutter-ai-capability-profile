@@ -11,6 +11,7 @@ import 'package:ai_capability_dashboard/models/team_profile.dart';
 import 'package:ai_capability_dashboard/providers/auth_notifier.dart';
 import 'package:ai_capability_dashboard/providers/dashboard_notifier.dart';
 import 'package:ai_capability_dashboard/providers/team_notifier.dart';
+import 'package:ai_capability_dashboard/utils/application.dart';
 import 'package:ai_capability_dashboard/widgets/capability_profile_card.dart';
 import 'package:ai_capability_dashboard/widgets/profile_insights_card.dart';
 import 'package:ai_capability_dashboard/widgets/profile_tab.dart';
@@ -332,6 +333,65 @@ void main() {
         find.textContaining('Agent use reported in 0 of 0'),
         findsNothing,
       );
+    });
+
+    testWidgets('renders all cards with a single-member team', (tester) async {
+      final teamNotifier = TeamNotifier.forTesting(
+        profile: TeamProfile(
+          members: [
+            IndividualProfile(name: 'Alice', scores: [4.5, 3, 3, 3, 3]),
+          ],
+        ),
+        aggregateDimensions: _aggregateDimensions(),
+        aggregateCoverageDomains: _aggregateDomains(),
+        aggregateMemberCount: 1,
+      );
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => AuthNotifier.forTesting()),
+            ChangeNotifierProvider(create: (_) => DashboardNotifier.forTesting()),
+            ChangeNotifierProvider.value(value: teamNotifier),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: ProfileTab()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CapabilityProfileCard), findsOneWidget);
+      expect(find.byType(StyleLensPanel), findsOneWidget);
+      expect(find.byType(ProfileInsightsCard), findsOneWidget);
+      expect(find.text('No team insights available yet'), findsNothing);
+
+      final card = tester.widget<CapabilityProfileCard>(
+        find.byType(CapabilityProfileCard),
+      );
+      expect(card.average, 3.3);
+    });
+
+    test('profileShapeLabel falls back to Focused adopter when no in-scope domains', () {
+      final naDomains = defaultDashboardData.applicationDomains.map((d) {
+        return ApplicationDomain(
+          id: d.id,
+          name: d.name,
+          shortName: d.shortName,
+          applicability: DomainApplicability.notApplicable,
+          involvement: DomainInvolvement.none,
+          value: DomainSignal.low,
+          confidence: DomainSignal.low,
+          capabilityIds: const [],
+        );
+      }).toList();
+
+      final label = profileShapeLabel(
+        _aggregateDimensions(),
+        naDomains,
+        defaultDashboardData.tiers,
+      );
+      expect(label, 'Focused adopter');
     });
   });
 }

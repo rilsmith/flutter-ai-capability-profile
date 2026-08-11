@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:ai_capability_dashboard/data/defaults.dart';
 import 'package:ai_capability_dashboard/data/style_lens_config.dart';
-import 'package:ai_capability_dashboard/models/dimension.dart';
 import 'package:ai_capability_dashboard/utils/style_lens.dart';
 import 'package:ai_capability_dashboard/widgets/style_lens_panel.dart';
 
@@ -47,7 +46,7 @@ void main() {
           .map(
             (d) => d.copyWith(
               score: switch (d.id) {
-                4 || 9 => 5.0,
+                4 || 5 => 5.0,
                 _ => 2.0,
               },
             ),
@@ -76,7 +75,7 @@ void main() {
             (d) => d.copyWith(
               score: switch (d.id) {
                 2 || 3 => 5.0,
-                6 || 8 || 7 => 4.5,
+                5 => 4.5,
                 _ => 3.0,
               },
             ),
@@ -108,7 +107,7 @@ void main() {
       );
 
       expect(analysis.selectedDimensionHint, isNotNull);
-      expect(analysis.selectedDimensionHint, contains('Prompt & Interaction Design'));
+      expect(analysis.selectedDimensionHint, contains('Prompt Engineering'));
       expect(analysis.selectedDimensionHint, contains('Warrior'));
       expect(analysis.selectedDimensionHint, contains('75%'));
     });
