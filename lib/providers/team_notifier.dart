@@ -40,7 +40,8 @@ class _AggregateDomain {
 }
 
 class TeamNotifier extends ChangeNotifier {
-  TeamNotifier() {
+  TeamNotifier({http.Client? httpClient})
+      : _httpClient = httpClient ?? http.Client() {
     _initialized = true;
     notifyListeners();
   }
@@ -51,14 +52,17 @@ class TeamNotifier extends ChangeNotifier {
     TeamProfile? profile,
     List<ApplicationDomain>? aggregateCoverageDomains,
     int aggregateMemberCount = 0,
-  })  : _profile = profile ?? const TeamProfile(),
+    List<String>? warnings,
+  })  : _httpClient = http.Client(),
+        _profile = profile ?? const TeamProfile(),
         _aggregateDomains = [],
         _aggregateDomainsOverride = aggregateCoverageDomains,
         _aggregateMemberCount = aggregateMemberCount,
+        _warnings = warnings ?? [],
         _initialized = true,
-        _loading = false {
-    // Avoid notifying during provider creation in widget tests.
-  }
+        _loading = false;
+
+  final http.Client _httpClient;
 
   TeamProfile _profile = const TeamProfile();
   bool _initialized = false;
@@ -69,11 +73,13 @@ class TeamNotifier extends ChangeNotifier {
   bool _hasAttemptedFetch = false;
   List<_AggregateDomain> _aggregateDomains = [];
   int _aggregateMemberCount = 0;
+  List<String> _warnings = [];
 
   TeamProfile get profile => _profile;
   bool get initialized => _initialized;
   bool get loading => _loading;
   String? get error => _error;
+  List<String> get warnings => _warnings;
   int get memberCount => _profile.members.length;
   int get aggregateMemberCount => _aggregateMemberCount;
 
@@ -122,6 +128,7 @@ class TeamNotifier extends ChangeNotifier {
     _hasAttemptedFetch = true;
     _loading = true;
     _error = null;
+    _warnings = [];
     notifyListeners();
 
     try {
@@ -130,8 +137,7 @@ class TeamNotifier extends ChangeNotifier {
         'Authorization': 'Bearer $token',
         'Accept': 'application/json',
       };
-
-      final teamResp = await http
+      final teamResp = await _httpClient
           .get(Uri.parse('$origin/api/submissions/team'), headers: headers)
           .timeout(const Duration(seconds: 15));
       if (teamResp.statusCode != 200) {
@@ -142,8 +148,7 @@ class TeamNotifier extends ChangeNotifier {
       final teamData = jsonDecode(teamResp.body) as Map<String, dynamic>;
       final submissions = (teamData['submissions'] as List<dynamic>)
           .cast<Map<String, dynamic>>();
-
-      final aggResp = await http
+      final aggResp = await _httpClient
           .get(Uri.parse('$origin/api/submissions/team/aggregate'), headers: headers)
           .timeout(const Duration(seconds: 15));
       if (aggResp.statusCode != 200) {
@@ -158,27 +163,41 @@ class TeamNotifier extends ChangeNotifier {
           .map((e) => _AggregateDomain.fromJson(e as Map<String, dynamic>))
           .toList();
 
-      final members = submissions.map((sub) {
-        final payload = sub['payload'] as Map<String, dynamic>;
-        final dims = (payload['dimensions'] as List<dynamic>? ?? [])
-            .map((d) => Dimension.fromJson(d as Map<String, dynamic>))
-            .toList();
-        final scores = dims.map((d) => d.score).toList();
-        while (scores.length < 5) {
-          scores.add(0.0);
+      final members = <IndividualProfile>[];
+      for (final sub in submissions) {
+        try {
+          final payload = sub['payload'] as Map<String, dynamic>?;
+          if (payload == null) {
+            _warnings.add(_warningName(sub, 'missing payload'));
+            continue;
+          }
+          final rawDimensions = payload['dimensions'] as List<dynamic>?;
+          if (rawDimensions == null || rawDimensions.isEmpty) {
+            _warnings.add(_warningName(sub, 'missing dimensions'));
+            continue;
+          }
+          final dims = rawDimensions
+              .map((d) => Dimension.fromJson(d as Map<String, dynamic>))
+              .toList();
+          final scores = dims.map((d) => d.score).toList();
+          while (scores.length < 5) {
+            scores.add(0.0);
+          }
+          final displayName = sub['user_display_name'] as String?;
+          final email = sub['user_email'] as String?;
+          final uid = sub['user_uid'] as String?;
+          final name = (displayName?.isNotEmpty == true)
+              ? displayName!
+              : (email?.isNotEmpty == true)
+                  ? email!
+                  : (uid?.isNotEmpty == true)
+                      ? uid!
+                      : 'Unknown';
+          members.add(IndividualProfile(name: name, scores: scores));
+        } catch (e) {
+          _warnings.add(_warningName(sub, 'invalid submission ($e)'));
         }
-        final displayName = sub['user_display_name'] as String?;
-        final email = sub['user_email'] as String?;
-        final uid = sub['user_uid'] as String?;
-        final name = (displayName?.isNotEmpty == true)
-            ? displayName!
-            : (email?.isNotEmpty == true)
-                ? email!
-                : (uid?.isNotEmpty == true)
-                    ? uid!
-                    : 'Unknown';
-        return IndividualProfile(name: name, scores: scores);
-      }).toList();
+      }
 
       _profile = TeamProfile(members: members);
       _loading = false;
@@ -197,7 +216,34 @@ class TeamNotifier extends ChangeNotifier {
     _lastToken = null;
     _hasAttemptedFetch = false;
     _error = null;
+    _warnings = [];
     _loading = false;
+    notifyListeners();
+  }
+
+  String _warningName(Map<String, dynamic> sub, String reason) {
+    final displayName = sub['user_display_name'] as String?;
+    final email = sub['user_email'] as String?;
+    final uid = sub['user_uid'] as String?;
+    final name = (displayName?.isNotEmpty == true)
+        ? displayName!
+        : (email?.isNotEmpty == true)
+            ? email!
+            : (uid?.isNotEmpty == true)
+                ? uid!
+                : 'Unknown teammate';
+    return '$name: $reason';
+  }
+
+  /// Testing-only helpers to set transient states without a backend call.
+  void debugSetError(String message) {
+    _error = message;
+    _loading = false;
+    notifyListeners();
+  }
+
+  void debugSetLoading(bool value) {
+    _loading = value;
     notifyListeners();
   }
 }

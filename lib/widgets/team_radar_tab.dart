@@ -20,7 +20,11 @@ class TeamRadarTab extends StatefulWidget {
   State<TeamRadarTab> createState() => _TeamRadarTabState();
 }
 
-class _TeamRadarTabState extends State<TeamRadarTab> {
+class _TeamRadarTabState extends State<TeamRadarTab>
+    with AutomaticKeepAliveClientMixin<TeamRadarTab> {
+  @override
+  bool get wantKeepAlive => true;
+
   int? _selectedMemberIndex;
 
   final _memberColors = [
@@ -44,6 +48,7 @@ class _TeamRadarTabState extends State<TeamRadarTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final dashNotifier = context.watch<DashboardNotifier>();
     final teamNotifier = context.watch<TeamNotifier>();
     final data = dashNotifier.data;
@@ -104,6 +109,8 @@ class _TeamRadarTabState extends State<TeamRadarTab> {
           const SizedBox(height: 20),
           _buildHeader(context, profile),
           const SizedBox(height: 20),
+          if (teamNotifier.warnings.isNotEmpty) _buildWarnings(context, teamNotifier),
+          if (teamNotifier.warnings.isNotEmpty) const SizedBox(height: 16),
           if (teamNotifier.loading)
             const Center(child: CircularProgressIndicator())
           else if (teamNotifier.error != null)
@@ -209,6 +216,52 @@ class _TeamRadarTabState extends State<TeamRadarTab> {
             'Team submissions from the SDLC Matrix tab will appear here once you and your teammates submit your matrices.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 13, color: DashboardTheme.muted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWarnings(BuildContext context, TeamNotifier teamNotifier) {
+    final warnings = teamNotifier.warnings;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFFCD34D)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.warning_amber, color: Color(0xFFD97706), size: 18),
+              const SizedBox(width: 8),
+              Text(
+                warnings.length == 1
+                    ? '1 teammate submission could not be loaded'
+                    : '${warnings.length} teammate submissions could not be loaded',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF92400E),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...warnings.map(
+            (w) => Padding(
+              padding: const EdgeInsets.only(left: 26, bottom: 2),
+              child: Text(
+                w,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF92400E),
+                ),
+              ),
+            ),
           ),
         ],
       ),
