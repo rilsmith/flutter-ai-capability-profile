@@ -29,6 +29,11 @@ spec:
                 secretKeyRef:
                   name: ai-capability-dashboard-secret
                   key: POSTGRES_PASSWORD
+            # Use a subdirectory for the data directory so Postgres does not
+            # try to initialize the PVC mount point directly (which may contain
+            # a lost+found directory and cause initdb to fail).
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
           ports:
             - containerPort: 5432
               name: postgres

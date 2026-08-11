@@ -24,6 +24,13 @@ Before applying the manifests, replace the placeholder values in:
 
 - `httpproxy.yaml` — the ingress hostname and TLS secret name.
 
+## Postgres data directory
+
+The Postgres deployment sets `PGDATA` to `/var/lib/postgresql/data/pgdata`
+so that Postgres initializes a subdirectory under the PVC mount point rather
+than the mount point itself, which avoids an `initdb` failure caused by the
+`lost+found` directory on the volume.
+
 ## Traffic routing
 
 The Contour `HTTPProxy` routes:
@@ -38,10 +45,25 @@ refreshes.
 
 ## Container images
 
-The API and web deployments use locally built images:
+The API and web images are built locally and pushed to the Adobe internal
+registry so the `ethos270-stage-va7` cluster can pull them:
 
-- `ai-capability-dashboard-api:latest`
-- `ai-capability-dashboard-web:latest`
+- `docker-ads-release.dr-uw2.adobeitc.com/ai-capability-dashboard-api:latest`
+- `docker-ads-release.dr-uw2.adobeitc.com/ai-capability-dashboard-web:latest`
 
-Both deployments set `imagePullPolicy: IfNotPresent` so the cluster uses the
-locally loaded images instead of trying to pull from a remote registry.
+Both deployments set `imagePullPolicy: IfNotPresent` and reference the
+`docker-ads-release-auth` image pull secret so the cluster resolves the images
+from the Adobe registry rather than attempting to pull from Docker Hub.
+
+To rebuild and push:
+
+```bash
+flutter build web
+REG=docker-ads-release.dr-uw2.adobeitc.com
+docker build -f api.Dockerfile -t ai-capability-dashboard-api:latest .
+docker build -f web.Dockerfile -t ai-capability-dashboard-web:latest .
+docker tag ai-capability-dashboard-api:latest $REG/ai-capability-dashboard-api:latest
+docker tag ai-capability-dashboard-web:latest $REG/ai-capability-dashboard-web:latest
+docker push $REG/ai-capability-dashboard-api:latest
+docker push $REG/ai-capability-dashboard-web:latest
+```

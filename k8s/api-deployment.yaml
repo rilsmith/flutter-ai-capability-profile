@@ -15,9 +15,11 @@ spec:
       labels:
         app: api
     spec:
+      imagePullSecrets:
+        - name: docker-ads-release-auth
       containers:
         - name: api
-          image: ai-capability-dashboard-api:latest
+          image: docker-ads-release.dr-uw2.adobeitc.com/ai-capability-dashboard-api:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5000
