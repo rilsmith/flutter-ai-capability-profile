@@ -292,6 +292,10 @@ The `CORS_ORIGIN` value in `k8s/configmap.yaml` and the `REDIRECT_URI` value in 
     └── httpproxy.yaml
 ```
 
+## Notes
+
+- The backend validates the full `DashboardData` payload on `POST /api/submissions`. Malformed payloads (missing required string fields, non-numeric scores, etc.) are rejected with HTTP 400 before persistence, preventing the Flutter client from loading corrupted snapshots.
+
 ## Tech stack
 
 - **Flutter (web)** — UI framework
