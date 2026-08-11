@@ -26,34 +26,44 @@ class ProfileInsightsCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          ...insights.map(
-            (insight) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    '• ',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: DashboardTheme.body,
-                      height: 1.5,
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      insight,
-                      style: const TextStyle(
+          if (insights.isEmpty)
+            const Text(
+              'No aggregate insights available for the current team data.',
+              style: TextStyle(
+                fontSize: 13,
+                color: DashboardTheme.muted,
+                height: 1.5,
+              ),
+            )
+          else
+            ...insights.map(
+              (insight) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '• ',
+                      style: TextStyle(
                         fontSize: 13,
                         color: DashboardTheme.body,
                         height: 1.5,
                       ),
                     ),
-                  ),
-                ],
+                    Expanded(
+                      child: Text(
+                        insight,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: DashboardTheme.body,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

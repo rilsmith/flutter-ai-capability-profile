@@ -690,7 +690,7 @@ def test_get_submissions_team_aggregate_returns_averages(client, monkeypatch, db
                     "involvement": "regular",
                     "value": "high",
                     "confidence": "high",
-                    "capabilityIds": [],
+                    "capabilityIds": [1],
                 },
             ],
         ),
@@ -714,7 +714,7 @@ def test_get_submissions_team_aggregate_returns_averages(client, monkeypatch, db
                     "involvement": "occasional",
                     "value": "moderate",
                     "confidence": "low",
-                    "capabilityIds": [],
+                    "capabilityIds": [2, 3],
                 },
             ],
         ),
@@ -734,6 +734,7 @@ def test_get_submissions_team_aggregate_returns_averages(client, monkeypatch, db
     assert domains[1]["involvement_average"] == 1.5
     assert domains[1]["value_average"] == 1.5
     assert domains[1]["confidence_average"] == 1.0
+    assert domains[1]["capability_ids"] == [1, 2, 3]
 
 
 def test_get_submissions_team_aggregate_uses_latest_per_user(client, monkeypatch, db_conn):

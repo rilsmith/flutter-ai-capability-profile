@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../data/defaults.dart';
 import '../models/application_domain.dart';
 import '../models/dimension.dart';
 import '../models/individual_profile.dart';
@@ -18,6 +19,7 @@ class _AggregateDomain {
     required this.involvementAverage,
     required this.inScopeCount,
     required this.notApplicableCount,
+    required this.capabilityIds,
   });
 
   factory _AggregateDomain.fromJson(Map<String, dynamic> json) {
@@ -28,6 +30,10 @@ class _AggregateDomain {
       involvementAverage: (json['involvement_average'] as num).toDouble(),
       inScopeCount: json['in_scope_count'] as int? ?? 0,
       notApplicableCount: json['not_applicable_count'] as int? ?? 0,
+      capabilityIds: (json['capability_ids'] as List<dynamic>?)
+              ?.map((id) => id as int)
+              .toList() ??
+          const [],
     );
   }
 
@@ -37,6 +43,7 @@ class _AggregateDomain {
   final double involvementAverage;
   final int inScopeCount;
   final int notApplicableCount;
+  final List<int> capabilityIds;
 }
 
 class TeamNotifier extends ChangeNotifier {
@@ -51,12 +58,14 @@ class TeamNotifier extends ChangeNotifier {
   TeamNotifier.forTesting({
     TeamProfile? profile,
     List<ApplicationDomain>? aggregateCoverageDomains,
+    List<Dimension>? aggregateDimensions,
     int aggregateMemberCount = 0,
     List<String>? warnings,
   })  : _httpClient = http.Client(),
         _profile = profile ?? const TeamProfile(),
         _aggregateDomains = [],
         _aggregateDomainsOverride = aggregateCoverageDomains,
+        _aggregateDimensionsOverride = aggregateDimensions,
         _aggregateMemberCount = aggregateMemberCount,
         _warnings = warnings ?? [],
         _initialized = true,
@@ -67,11 +76,13 @@ class TeamNotifier extends ChangeNotifier {
   TeamProfile _profile = const TeamProfile();
   bool _initialized = false;
   List<ApplicationDomain>? _aggregateDomainsOverride;
+  List<Dimension>? _aggregateDimensionsOverride;
   bool _loading = false;
   String? _error;
   String? _lastToken;
   bool _hasAttemptedFetch = false;
   List<_AggregateDomain> _aggregateDomains = [];
+  List<Dimension> _aggregateDimensions = [];
   int _aggregateMemberCount = 0;
   List<String> _warnings = [];
 
@@ -82,6 +93,14 @@ class TeamNotifier extends ChangeNotifier {
   List<String> get warnings => _warnings;
   int get memberCount => _profile.members.length;
   int get aggregateMemberCount => _aggregateMemberCount;
+
+  /// The aggregated team dimensions returned by the backend aggregate endpoint.
+  List<Dimension> get aggregateDimensions {
+    if (_aggregateDimensionsOverride != null) {
+      return _aggregateDimensionsOverride!;
+    }
+    return _aggregateDimensions;
+  }
 
   /// Convert backend aggregate domains into [ApplicationDomain] objects for the
   /// SDLC Coverage panel. Involvement is derived from the average involvement
@@ -113,7 +132,7 @@ class TeamNotifier extends ChangeNotifier {
         involvement: involvement,
         value: DomainSignal.low,
         confidence: DomainSignal.low,
-        capabilityIds: const [],
+        capabilityIds: agg.capabilityIds,
       );
     }).toList();
   }
@@ -161,6 +180,23 @@ class TeamNotifier extends ChangeNotifier {
       _aggregateMemberCount = aggData['member_count'] as int? ?? 0;
       _aggregateDomains = (aggData['domains'] as List<dynamic>? ?? [])
           .map((e) => _AggregateDomain.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _aggregateDimensions = (aggData['dimensions'] as List<dynamic>? ?? [])
+          .map((e) {
+            final json = e as Map<String, dynamic>;
+            // Merge aggregate dimension with default descriptor so cards that
+            // need it (e.g., capability definition dialogs) have stable copy.
+            final defaultDim = defaultDashboardData.dimensions
+                .where((d) => d.id == json['id'] as int?)
+                .firstOrNull;
+            return Dimension(
+              id: json['id'] as int,
+              name: json['name'] as String,
+              score: (json['average'] as num).toDouble(),
+              color: json['color'] as String,
+              descriptor: defaultDim?.descriptor ?? '',
+            );
+          })
           .toList();
 
       final members = <IndividualProfile>[];
@@ -212,6 +248,7 @@ class TeamNotifier extends ChangeNotifier {
   void clear() {
     _profile = const TeamProfile();
     _aggregateDomains = [];
+    _aggregateDimensions = [];
     _aggregateMemberCount = 0;
     _lastToken = null;
     _hasAttemptedFetch = false;
@@ -245,5 +282,13 @@ class TeamNotifier extends ChangeNotifier {
   void debugSetLoading(bool value) {
     _loading = value;
     notifyListeners();
+  }
+}
+
+extension _FirstOrNull<E> on Iterable<E> {
+  E? get firstOrNull {
+    final iterator = this.iterator;
+    if (!iterator.moveNext()) return null;
+    return iterator.current;
   }
 }

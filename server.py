@@ -495,6 +495,7 @@ def _compute_aggregate(rows: list) -> dict:
                     "in_scope_count": 0,
                     "active_count": 0,
                     "not_applicable_count": 0,
+                    "capability_ids": set(),
                 },
             )
             entry["involvement_sum"] += _INVOLVEMENT_MAP.get(
@@ -505,6 +506,8 @@ def _compute_aggregate(rows: list) -> dict:
                 domain.get("confidence", "low"), 0
             )
             entry["count"] += 1
+            for cap_id in domain.get("capabilityIds", []) or []:
+                entry["capability_ids"].add(cap_id)
             if domain.get("applicability", "in_scope") == "not_applicable":
                 entry["not_applicable_count"] += 1
             else:
@@ -545,6 +548,7 @@ def _compute_aggregate(rows: list) -> dict:
                 "in_scope_count": s["in_scope_count"],
                 "active_count": s["active_count"],
                 "not_applicable_count": s["not_applicable_count"],
+                "capability_ids": sorted(s["capability_ids"]),
             }
         )
 
