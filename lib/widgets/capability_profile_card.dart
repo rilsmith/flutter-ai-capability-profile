@@ -17,6 +17,7 @@ class CapabilityProfileCard extends StatelessWidget {
     required this.maturityScale,
     this.selectedDimensionId,
     this.onSelectDimension,
+    this.shapeLabel,
   });
 
   final List<Dimension> dimensions;
@@ -27,6 +28,7 @@ class CapabilityProfileCard extends StatelessWidget {
   final List<MaturityLevel> maturityScale;
   final int? selectedDimensionId;
   final ValueChanged<int>? onSelectDimension;
+  final String? shapeLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +40,7 @@ class CapabilityProfileCard extends StatelessWidget {
       maxScore: maxScore,
       distribution: distribution,
       tiers: tiers,
+      shapeLabel: shapeLabel,
     );
     final scores = _ProfileScores(
       dimensions: dimensions,
@@ -111,12 +114,14 @@ class _ProfileSidebar extends StatelessWidget {
     required this.maxScore,
     required this.distribution,
     required this.tiers,
+    this.shapeLabel,
   });
 
   final double average;
   final int maxScore;
   final Distribution distribution;
   final TierGroup tiers;
+  final String? shapeLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -199,6 +204,34 @@ class _ProfileSidebar extends StatelessWidget {
               ],
             ),
           ),
+        if (shapeLabel != null && shapeLabel!.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          const Text(
+            'Profile Shape',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: DashboardTheme.body,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: DashboardTheme.primaryLight,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFBFDBFE)),
+            ),
+            child: Text(
+              shapeLabel!,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: DashboardTheme.primary,
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -371,7 +404,7 @@ class _ScoreRow extends StatelessWidget {
               height: 1,
               child: CustomPaint(
                 painter: _DottedLinePainter(
-                  color: DashboardTheme.subtle.withOpacity(0.3),
+                  color: DashboardTheme.subtle.withValues(alpha: 0.3),
                 ),
               ),
             ),

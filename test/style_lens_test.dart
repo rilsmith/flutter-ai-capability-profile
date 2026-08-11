@@ -123,6 +123,7 @@ void main() {
       );
 
       await tester.binding.setSurfaceSize(const Size(1200, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
 
       await tester.pumpWidget(
         MaterialApp(
@@ -144,8 +145,90 @@ void main() {
       expect(find.textContaining('Paladin'), findsWidgets);
       expect(find.textContaining('Artificer'), findsWidgets);
       expect(find.textContaining('Commander'), findsWidgets);
+    });
 
+    testWidgets('grid renders one column at narrow breakpoint', (tester) async {
+      final dimensions = defaultDashboardData.dimensions
+          .map((d) => d.copyWith(score: 3.0))
+          .toList();
+      final analysis = computeStyleLens(
+        dimensions,
+        tiers: tiers,
+        maxScore: maxScore,
+      );
+
+      await tester.binding.setSurfaceSize(const Size(320, 1600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: StyleLensPanel(
+                analysis: analysis,
+                config: styleLensConfig,
+                maxScore: maxScore,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final firstCard = find.byKey(
+        Key('style-lens-symbol-${StyleSymbol.values[0].name}'),
+      );
+      final secondCard = find.byKey(
+        Key('style-lens-symbol-${StyleSymbol.values[1].name}'),
+      );
+      final rect1 = tester.getRect(firstCard);
+      final rect2 = tester.getRect(secondCard);
+      // In a single-column layout the second card is directly below the first.
+      expect(rect2.left, closeTo(rect1.left, 2.0));
+      // Width is close to the full available panel width (screen - padding).
+      expect(rect1.width, closeTo(320 - 44, 4.0));
+    });
+
+    testWidgets('grid renders two columns at wide breakpoint', (tester) async {
+      final dimensions = defaultDashboardData.dimensions
+          .map((d) => d.copyWith(score: 3.0))
+          .toList();
+      final analysis = computeStyleLens(
+        dimensions,
+        tiers: tiers,
+        maxScore: maxScore,
+      );
+
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: StyleLensPanel(
+                analysis: analysis,
+                config: styleLensConfig,
+                maxScore: maxScore,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final firstCard = find.byKey(
+        Key('style-lens-symbol-${StyleSymbol.values[0].name}'),
+      );
+      final secondCard = find.byKey(
+        Key('style-lens-symbol-${StyleSymbol.values[1].name}'),
+      );
+      final rect1 = tester.getRect(firstCard);
+      final rect2 = tester.getRect(secondCard);
+      // In a two-column layout the second card is beside the first.
+      expect(rect2.left, greaterThan(rect1.right));
+      // Each card is roughly half the available panel width minus Wrap spacing.
+      expect(rect1.width, closeTo((800 - 44 - 10) / 2, 4.0));
     });
   });
 }

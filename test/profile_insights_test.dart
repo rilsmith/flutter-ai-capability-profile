@@ -372,6 +372,75 @@ void main() {
       expect(card.average, 3.3);
     });
 
+    testWidgets('renders profile shape label from aggregate data', (tester) async {
+      final teamNotifier = TeamNotifier.forTesting(
+        aggregateDimensions: _aggregateDimensions(),
+        aggregateCoverageDomains: _aggregateDomains(),
+        aggregateMemberCount: 1,
+      );
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => AuthNotifier.forTesting()),
+            ChangeNotifierProvider(create: (_) => DashboardNotifier.forTesting()),
+            ChangeNotifierProvider.value(value: teamNotifier),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: ProfileTab()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Profile Shape'), findsOneWidget);
+      // Average 3.3 (< high threshold) and all domains active => Capable explorer.
+      expect(find.text('Capable explorer'), findsOneWidget);
+      final card = tester.widget<CapabilityProfileCard>(
+        find.byType(CapabilityProfileCard),
+      );
+      expect(card.shapeLabel, 'Capable explorer');
+    });
+
+    testWidgets('renders profile shape fallback when no in-scope domains',
+        (tester) async {
+      final naDomains = defaultDashboardData.applicationDomains.map((d) {
+        return ApplicationDomain(
+          id: d.id,
+          name: d.name,
+          shortName: d.shortName,
+          applicability: DomainApplicability.notApplicable,
+          involvement: DomainInvolvement.none,
+          value: DomainSignal.low,
+          confidence: DomainSignal.low,
+          capabilityIds: const [],
+        );
+      }).toList();
+
+      final teamNotifier = TeamNotifier.forTesting(
+        aggregateDimensions: _aggregateDimensions(),
+        aggregateCoverageDomains: naDomains,
+        aggregateMemberCount: 1,
+      );
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => AuthNotifier.forTesting()),
+            ChangeNotifierProvider(create: (_) => DashboardNotifier.forTesting()),
+            ChangeNotifierProvider.value(value: teamNotifier),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: ProfileTab()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Profile Shape'), findsOneWidget);
+      expect(find.text('Focused adopter'), findsOneWidget);
+    });
+
     test('profileShapeLabel falls back to Focused adopter when no in-scope domains', () {
       final naDomains = defaultDashboardData.applicationDomains.map((d) {
         return ApplicationDomain(

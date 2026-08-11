@@ -172,6 +172,7 @@ class _SymbolScoreGrid extends StatelessWidget {
           runSpacing: 10,
           children: StyleSymbol.values.map((symbol) {
             return SizedBox(
+              key: Key('style-lens-symbol-${symbol.name}'),
               width: cardWidth,
               child: _SymbolScoreCard(
                 symbol: symbol,
@@ -211,10 +212,10 @@ class _SymbolScoreCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isDominant ? accent.withOpacity(0.06) : Colors.white,
+        color: isDominant ? accent.withValues(alpha: 0.06) : Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isDominant ? accent.withOpacity(0.35) : DashboardTheme.cardBorder,
+          color: isDominant ? accent.withValues(alpha: 0.35) : DashboardTheme.cardBorder,
         ),
 
       ),

@@ -88,6 +88,7 @@ class _Content extends StatelessWidget {
       tiers: data.tiers,
       maxScore: data.maxScore,
     );
+    final shapeLabel = profileShapeLabel(dimensions, domains, data.tiers);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -101,6 +102,7 @@ class _Content extends StatelessWidget {
           maturityScale: data.maturityScale,
           selectedDimensionId: null,
           onSelectDimension: null,
+          shapeLabel: shapeLabel,
         ),
         const SizedBox(height: 20),
         StyleLensPanel(
