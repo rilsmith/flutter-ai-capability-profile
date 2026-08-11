@@ -6,12 +6,12 @@ metadata:
   labels:
     app: ai-capability-dashboard
 data:
-  # Replace these placeholder values with the actual non-sensitive configuration
-  # before applying the manifests. Do not commit real values to source control.
-  LDAP_URL: "YOUR_LDAP_URL_HERE"
-  LDAP_BASE_DN: "YOUR_LDAP_BASE_DN_HERE"
+  # Non-sensitive configuration values for the AI Capability Dashboard.
+  # These values are documented in the mission environment guide.
+  LDAP_URL: "ldap://ldap.loc.adobe.net"
+  LDAP_BASE_DN: "o=adbe"
   # Must match the HTTPS origin of the Contour HTTPProxy fqdn.
-  CORS_ORIGIN: "https://ai-capability-dashboard.ns-team-ads-test.corp.adobe.com"
+  CORS_ORIGIN: "https://ai-capability-dashboard.corp.ethos270-stage-va7.ethos.adobe.net"
   # In Kubernetes the API serves only API/OAuth routes; disable static serving.
   SERVE_STATIC: "false"
   WEB_DIR: "/app/build/web"

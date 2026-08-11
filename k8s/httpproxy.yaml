@@ -7,7 +7,7 @@ metadata:
     app: ai-capability-dashboard
 spec:
   virtualhost:
-    fqdn: ai-capability-dashboard.ns-team-ads-test.corp.adobe.com
+    fqdn: ai-capability-dashboard.corp.ethos270-stage-va7.ethos.adobe.net
     tls:
       secretName: ai-capability-dashboard-tls
   routes:
@@ -20,6 +20,17 @@ spec:
     # OAuth callback goes to the API service.
     - conditions:
         - prefix: /auth
+      services:
+        - name: api
+          port: 5000
+    # Health and readiness probes are served by the API.
+    - conditions:
+        - prefix: /health
+      services:
+        - name: api
+          port: 5000
+    - conditions:
+        - prefix: /ready
       services:
         - name: api
           port: 5000
