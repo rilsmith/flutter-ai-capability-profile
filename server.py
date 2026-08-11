@@ -48,6 +48,12 @@ LDAP_BASE_DN = os.environ.get("LDAP_BASE_DN")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 CORS_ORIGIN = os.environ.get("CORS_ORIGIN")
 WEB_DIR = os.environ.get("WEB_DIR", "build/web")
+SERVE_STATIC = os.environ.get("SERVE_STATIC", "true").lower() in (
+    "true",
+    "1",
+    "yes",
+    "on",
+)
 
 
 def _validate_env() -> list[str]:
@@ -61,11 +67,14 @@ if _missing:
     print("Copy .env.example to .env and fill in the required values.")
     sys.exit(1)
 
-WEB_DIR_ABS = os.path.abspath(WEB_DIR)
-if not os.path.isdir(WEB_DIR_ABS):
-    print(f"ERROR: Flutter web build not found at {WEB_DIR_ABS}")
-    print("Run:  flutter build web")
-    sys.exit(1)
+if SERVE_STATIC:
+    WEB_DIR_ABS = os.path.abspath(WEB_DIR)
+    if not os.path.isdir(WEB_DIR_ABS):
+        print(f"ERROR: Flutter web build not found at {WEB_DIR_ABS}")
+        print("Run:  flutter build web")
+        sys.exit(1)
+else:
+    WEB_DIR_ABS = ""
 
 
 # ── Logging ──────────────────────────────────────────────────────────────────
@@ -666,14 +675,16 @@ def api_not_found(path: str) -> Any:
 
 # ── Static file serving (local development only) ─────────────────────────────
 
-@app.route("/", defaults={"path": ""})
-@app.route("/<path:path>")
-def static_files(path: str) -> Any:
-    """Serve the Flutter web build; fall back to index.html for SPA routing."""
-    file_path = os.path.join(WEB_DIR_ABS, path)
-    if path and os.path.isfile(file_path):
-        return send_from_directory(WEB_DIR_ABS, path)
-    return send_from_directory(WEB_DIR_ABS, "index.html")
+if SERVE_STATIC:
+
+    @app.route("/", defaults={"path": ""})
+    @app.route("/<path:path>")
+    def static_files(path: str) -> Any:
+        """Serve the Flutter web build; fall back to index.html for SPA routing."""
+        file_path = os.path.join(WEB_DIR_ABS, path)
+        if path and os.path.isfile(file_path):
+            return send_from_directory(WEB_DIR_ABS, path)
+        return send_from_directory(WEB_DIR_ABS, "index.html")
 
 
 # ── Entry point ──────────────────────────────────────────────────────────────
@@ -688,6 +699,9 @@ if __name__ == "__main__":
         print(f"ERROR: unable to initialize database: {exc}")
         sys.exit(1)
 
-    print(f"Serving Flutter app at http://localhost:5000")
-    print(f"Web root: {WEB_DIR_ABS}")
+    if SERVE_STATIC:
+        print(f"Serving Flutter app at http://localhost:5000")
+        print(f"Web root: {WEB_DIR_ABS}")
+    else:
+        print("API-only mode: static files are served by the web pod")
     app.run(host="0.0.0.0", port=5000, debug=False)

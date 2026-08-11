@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-capability-dashboard-config
+  namespace: ns-team-ads-test
+  labels:
+    app: ai-capability-dashboard
+data:
+  # Replace these placeholder values with the actual non-sensitive configuration
+  # before applying the manifests. Do not commit real values to source control.
+  LDAP_URL: "YOUR_LDAP_URL_HERE"
+  LDAP_BASE_DN: "YOUR_LDAP_BASE_DN_HERE"
+  CORS_ORIGIN: "YOUR_CORS_ORIGIN_HERE"
+  # In Kubernetes the API serves only API/OAuth routes; disable static serving.
+  SERVE_STATIC: "false"
+  WEB_DIR: "/app/build/web"
