@@ -11,6 +11,7 @@ data:
   LDAP_URL: "ldap://ldap.loc.adobe.net"
   LDAP_BASE_DN: "o=adbe"
   # Must match the HTTPS origin of the Contour HTTPProxy fqdn.
+  # This is the Kubernetes ingress origin; local dev uses http://localhost:5000 (or :3100).
   CORS_ORIGIN: "https://ai-capability-dashboard.corp.ethos270-stage-va7.ethos.adobe.net"
   # In Kubernetes the API serves only API/OAuth routes; disable static serving.
   SERVE_STATIC: "false"

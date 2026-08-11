@@ -8,11 +8,13 @@ namespace on the `ethos270-stage-va7` context.
 Before applying the manifests, replace the placeholder values in:
 
 - `configmap.yaml` — LDAP URL/base DN, CORS origin, and web directory.
-  `CORS_ORIGIN` must match the HTTPS origin of the HTTPProxy fqdn.
+  `CORS_ORIGIN` must match the HTTPS origin of the HTTPProxy fqdn:
+  `https://ai-capability-dashboard.corp.ethos270-stage-va7.ethos.adobe.net`.
 - `secret.yaml` — placeholder GitHub OAuth credentials, redirect URI,
   database URL, and Postgres password. `REDIRECT_URI` must use the same
   HTTPS origin as the HTTPProxy fqdn so GitHub OAuth callbacks route back
-  through the ingress.
+  through the ingress:
+  `https://ai-capability-dashboard.corp.ethos270-stage-va7.ethos.adobe.net/auth`.
 - `secret.yaml` — placeholder GitHub OAuth credentials, redirect URI,
   database URL, and Postgres password. The placeholder values are committed
   so that no real secrets are tracked. Replace/update with:
@@ -21,7 +23,7 @@ Before applying the manifests, replace the placeholder values in:
   kubectl create secret generic ai-capability-dashboard-secret \
     --from-literal=GITHUB_CLIENT_ID=... \
     --from-literal=GITHUB_CLIENT_SECRET=... \
-    --from-literal=REDIRECT_URI=... \
+    --from-literal=REDIRECT_URI=https://ai-capability-dashboard.corp.ethos270-stage-va7.ethos.adobe.net/auth \
     --from-literal=DATABASE_URL=... \
     --from-literal=POSTGRES_PASSWORD=... \
     -n ns-team-ads-test --dry-run=client -o yaml > k8s/secret.yaml
@@ -29,7 +31,7 @@ Before applying the manifests, replace the placeholder values in:
 
 - `httpproxy.yaml` — the ingress hostname and TLS secret name.
   The current deployment uses:
-  - `fqdn: ai-capability-dashboard.ns-team-ads-test.corp.adobe.com`
+  - `fqdn: ai-capability-dashboard.corp.ethos270-stage-va7.ethos.adobe.net`
   - `tls.secretName: ai-capability-dashboard-tls`
   The TLS secret is created in the `ns-team-ads-test` namespace with a
   self-signed certificate for the chosen hostname. Update the fqdn and

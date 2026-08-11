@@ -180,7 +180,7 @@ You can regenerate the Secret safely with:
 kubectl create secret generic ai-capability-dashboard-secret \
   --from-literal=GITHUB_CLIENT_ID=YOUR_GITHUB_CLIENT_ID \
   --from-literal=GITHUB_CLIENT_SECRET=YOUR_GITHUB_CLIENT_SECRET \
-  --from-literal=REDIRECT_URI=YOUR_REDIRECT_URI \
+  --from-literal=REDIRECT_URI=https://ai-capability-dashboard.corp.ethos270-stage-va7.ethos.adobe.net/auth \
   --from-literal=DATABASE_URL=YOUR_DATABASE_URL \
   --from-literal=POSTGRES_PASSWORD=YOUR_POSTGRES_PASSWORD \
   -n ns-team-ads-test --dry-run=client -o yaml > k8s/secret.yaml
@@ -192,7 +192,7 @@ The cluster pulls images from the Adobe internal registry. Build, tag, and push 
 
 ```bash
 flutter build web --dart-define=GITHUB_CLIENT_ID=YOUR_GITHUB_CLIENT_ID \
-  --dart-define=REDIRECT_URI=YOUR_REDIRECT_URI \
+  --dart-define=REDIRECT_URI=https://ai-capability-dashboard.corp.ethos270-stage-va7.ethos.adobe.net/auth \
   --dart-define=ALLOW_UNVERIFIED_TEST_EMAIL=true
 
 REG=docker-ads-release.dr-uw2.adobeitc.com
@@ -256,7 +256,10 @@ Because the catch-all `/` route is listed last, any request that does not match 
 
 TLS is terminated by Envoy using the secret referenced by `tls.secretName: ai-capability-dashboard-tls`. The current deployment uses a self-signed certificate stored in the `ns-team-ads-test` namespace for the FQDN `ai-capability-dashboard.corp.ethos270-stage-va7.ethos.adobe.net`.
 
-The `CORS_ORIGIN` value in `k8s/configmap.yaml` and the `REDIRECT_URI` value in `k8s/secret.yaml` must both use the same HTTPS origin as the HTTPProxy FQDN so that GitHub OAuth callbacks route back through the ingress and browser CORS checks pass.
+The `CORS_ORIGIN` value in `k8s/configmap.yaml` and the `REDIRECT_URI` value in `k8s/secret.yaml` must both use the same HTTPS origin as the HTTPProxy FQDN so that GitHub OAuth callbacks route back through the ingress and browser CORS checks pass. For this deployment:
+
+- `CORS_ORIGIN`: `https://ai-capability-dashboard.corp.ethos270-stage-va7.ethos.adobe.net`
+- `REDIRECT_URI`: `https://ai-capability-dashboard.corp.ethos270-stage-va7.ethos.adobe.net/auth`
 
 ## Project structure
 
