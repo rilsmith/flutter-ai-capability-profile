@@ -20,6 +20,7 @@ class UserMenu extends StatelessWidget {
     final user = auth.user;
     if (user == null) return const SizedBox.shrink();
 
+    final displayName = user.name.trim().isNotEmpty ? user.name : user.login;
     final ldap = auth.ldapInfo;
     final managerValue = (ldap != null && ldap.manager.isNotEmpty)
         ? ldap.manager
@@ -48,7 +49,7 @@ class UserMenu extends StatelessWidget {
               backgroundImage: hasAvatar ? NetworkImage(user.avatarUrl) : null,
               child: !hasAvatar
                   ? Text(
-                      _initials(user.name),
+                      _initials(displayName),
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
@@ -60,7 +61,7 @@ class UserMenu extends StatelessWidget {
             const SizedBox(width: 8),
             Flexible(
               child: Text(
-                user.name,
+                displayName,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontSize: 13,
@@ -97,7 +98,7 @@ class UserMenu extends StatelessWidget {
                           hasAvatar ? NetworkImage(user.avatarUrl) : null,
                       child: !hasAvatar
                           ? Text(
-                              _initials(user.name),
+                              _initials(displayName),
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
@@ -112,7 +113,7 @@ class UserMenu extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            user.name,
+                            displayName,
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w700,

@@ -43,6 +43,21 @@ List<ApplicationDomain> _aggregateDomains() {
   }).toList();
 }
 
+class _TeamNotifierSpy extends TeamNotifier {
+  _TeamNotifierSpy() : super.forTesting();
+
+  int fetchCallCount = 0;
+  String? lastToken;
+  bool? lastForce;
+
+  @override
+  Future<void> fetchTeamData(String token, {bool force = false}) async {
+    fetchCallCount++;
+    lastToken = token;
+    lastForce = force;
+  }
+}
+
 void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -232,6 +247,91 @@ void main() {
       expect(find.textContaining('Import'), findsNothing);
       expect(find.textContaining('CSV'), findsNothing);
       expect(find.textContaining('JSON'), findsNothing);
+    });
+
+    testWidgets('retry action re-fetches team aggregate data', (tester) async {
+      final authNotifier = AuthNotifier.forTesting(
+        user: const GitHubUser(
+          login: 'testuser',
+          name: 'Test User',
+          email: 'testuser@example.com',
+          avatarUrl: '',
+        ),
+        token: 'test-token',
+      );
+      final teamSpy = _TeamNotifierSpy();
+      teamSpy.debugSetError('Failed to load team aggregate (500)');
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: authNotifier),
+            ChangeNotifierProvider(create: (_) => DashboardNotifier.forTesting()),
+            ChangeNotifierProvider<TeamNotifier>.value(value: teamSpy),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: ProfileTab()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Unable to load team insights'), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
+      expect(teamSpy.fetchCallCount, 0);
+
+      await tester.tap(find.text('Retry'));
+      await tester.pumpAndSettle();
+
+      expect(teamSpy.fetchCallCount, 1);
+      expect(teamSpy.lastToken, 'test-token');
+      expect(teamSpy.lastForce, isTrue);
+    });
+
+    testWidgets('shows empty insight message when all domains are not applicable',
+        (tester) async {
+      final naDomains = defaultDashboardData.applicationDomains.map((d) {
+        return ApplicationDomain(
+          id: d.id,
+          name: d.name,
+          shortName: d.shortName,
+          applicability: DomainApplicability.notApplicable,
+          involvement: DomainInvolvement.none,
+          value: DomainSignal.low,
+          confidence: DomainSignal.low,
+          capabilityIds: const [],
+        );
+      }).toList();
+
+      final teamNotifier = TeamNotifier.forTesting(
+        aggregateDimensions: _aggregateDimensions(),
+        aggregateCoverageDomains: naDomains,
+        aggregateMemberCount: 1,
+      );
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => AuthNotifier.forTesting()),
+            ChangeNotifierProvider(create: (_) => DashboardNotifier.forTesting()),
+            ChangeNotifierProvider.value(value: teamNotifier),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: ProfileTab()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ProfileInsightsCard), findsOneWidget);
+      expect(
+        find.text('No aggregate insights available for the current team data.'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Agent use reported in 0 of 0'),
+        findsNothing,
+      );
     });
   });
 }

@@ -210,5 +210,30 @@ void main() {
 
       expect(find.text('testuser@example.com'), findsOneWidget);
     });
+
+    testWidgets('falls back to GitHub login when name is empty', (tester) async {
+      final authNotifier = AuthNotifier.forTesting(
+        user: const GitHubUser(
+          login: 'testuser',
+          name: '',
+          email: 'testuser@example.com',
+          avatarUrl: '',
+        ),
+      );
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: authNotifier,
+          child: const MaterialApp(
+            home: Scaffold(body: UserMenu()),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('testuser'), findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
+    });
   });
 }

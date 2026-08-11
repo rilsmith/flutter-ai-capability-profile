@@ -122,50 +122,54 @@ List<String> computeProfileInsights(
     }
   }
 
-  final latent = highCaps.where((cap) {
-    return active.every((d) => !d.capabilityIds.contains(cap.id));
-  }).toList();
-  if (latent.isNotEmpty) {
-    final names = latent.take(2).map((d) => d.name).join(', ');
-    final suffix = latent.length > 2 ? ', and others' : '';
-    insights.add(
-      '$names$suffix: rated highly but not linked to any active domain yet — potential latent strength.',
-    );
+  if (active.isNotEmpty) {
+    final latent = highCaps.where((cap) {
+      return active.every((d) => !d.capabilityIds.contains(cap.id));
+    }).toList();
+    if (latent.isNotEmpty) {
+      final names = latent.take(2).map((d) => d.name).join(', ');
+      final suffix = latent.length > 2 ? ', and others' : '';
+      insights.add(
+        '$names$suffix: rated highly but not linked to any active domain yet — potential latent strength.',
+      );
+    }
   }
 
-  if (avgScore >= tiers.high.min &&
-      breadth.activeCount >= (breadth.inScopeCount * 0.6).ceil()) {
-    insights.add(
-      'Capability and application breadth both span most of your in-scope work — a systemic agentic practice profile.',
-    );
-  } else if (avgScore >= tiers.medium.min &&
-      breadth.activeCount >= (breadth.inScopeCount * 0.5).ceil()) {
-    insights.add(
-      'Broad application with developing capability depth — experimentation is spread across the lifecycle.',
-    );
-  } else if (avgScore >= tiers.high.min &&
-      breadth.activeCount <= (breadth.inScopeCount / 3).ceil()) {
-    insights.add(
-      'Deep capability concentration in a focused set of domains — a specialist application profile.',
-    );
+  if (breadth.inScopeCount > 0) {
+    if (avgScore >= tiers.high.min &&
+        breadth.activeCount >= (breadth.inScopeCount * 0.6).ceil()) {
+      insights.add(
+        'Capability and application breadth both span most of your in-scope work — a systemic agentic practice profile.',
+      );
+    } else if (avgScore >= tiers.medium.min &&
+        breadth.activeCount >= (breadth.inScopeCount * 0.5).ceil()) {
+      insights.add(
+        'Broad application with developing capability depth — experimentation is spread across the lifecycle.',
+      );
+    } else if (avgScore >= tiers.high.min &&
+        breadth.activeCount <= (breadth.inScopeCount / 3).ceil()) {
+      insights.add(
+        'Deep capability concentration in a focused set of domains — a specialist application profile.',
+      );
+    }
   }
 
-  Dimension? reliability;
+  Dimension? harness;
   for (final dimension in dimensions) {
-    if (dimension.name.contains('Evaluation')) {
-      reliability = dimension;
+    if (dimension.name.contains('Harness')) {
+      harness = dimension;
       break;
     }
   }
-  if (reliability != null && reliability.score >= tiers.high.min) {
-    final reliabilityId = reliability.id;
-    final reliabilityDomains = active
-        .where((d) => d.capabilityIds.contains(reliabilityId))
+  if (harness != null && harness.score >= tiers.high.min) {
+    final harnessId = harness.id;
+    final harnessDomains = active
+        .where((d) => d.capabilityIds.contains(harnessId))
         .map((d) => d.shortName)
         .toList();
-    if (reliabilityDomains.length == 1) {
+    if (harnessDomains.length == 1) {
       insights.add(
-        'Evaluation & Verification shows up only in ${reliabilityDomains.first} — consider whether testing, eval, or quality contexts apply.',
+        'Harness Engineering shows up only in ${harnessDomains.first} — consider whether guardrails, eval, or quality contexts apply more broadly.',
       );
     }
   }
