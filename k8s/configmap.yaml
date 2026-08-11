@@ -10,7 +10,8 @@ data:
   # before applying the manifests. Do not commit real values to source control.
   LDAP_URL: "YOUR_LDAP_URL_HERE"
   LDAP_BASE_DN: "YOUR_LDAP_BASE_DN_HERE"
-  CORS_ORIGIN: "YOUR_CORS_ORIGIN_HERE"
+  # Must match the HTTPS origin of the Contour HTTPProxy fqdn.
+  CORS_ORIGIN: "https://ai-capability-dashboard.ns-team-ads-test.corp.adobe.com"
   # In Kubernetes the API serves only API/OAuth routes; disable static serving.
   SERVE_STATIC: "false"
   WEB_DIR: "/app/build/web"

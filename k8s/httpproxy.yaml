@@ -7,11 +7,9 @@ metadata:
     app: ai-capability-dashboard
 spec:
   virtualhost:
-    # Replace with the actual ingress hostname for this deployment.
-    fqdn: REPLACE_WITH_INGRESS_HOST
-    # Replace with the name of the TLS secret provisioned by the cluster.
+    fqdn: ai-capability-dashboard.ns-team-ads-test.corp.adobe.com
     tls:
-      secretName: REPLACE_WITH_TLS_SECRET
+      secretName: ai-capability-dashboard-tls
   routes:
     # All API traffic goes to the API service.
     - conditions:
