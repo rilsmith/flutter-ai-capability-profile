@@ -219,6 +219,8 @@ class DashboardNotifier extends ChangeNotifier {
           )
           .toList(),
     );
+    _submitSuccess = null;
+    _submitError = null;
     notifyListeners();
     _schedulePersist();
   }
@@ -253,6 +255,8 @@ class DashboardNotifier extends ChangeNotifier {
         );
       }).toList(),
     );
+    _submitSuccess = null;
+    _submitError = null;
     notifyListeners();
     _schedulePersist();
   }
@@ -266,6 +270,8 @@ class DashboardNotifier extends ChangeNotifier {
         );
       }).toList(),
     );
+    _submitSuccess = null;
+    _submitError = null;
     notifyListeners();
     _schedulePersist();
   }
@@ -279,6 +285,8 @@ class DashboardNotifier extends ChangeNotifier {
         );
       }).toList(),
     );
+    _submitSuccess = null;
+    _submitError = null;
     notifyListeners();
     _schedulePersist();
   }

@@ -139,7 +139,14 @@ class CapabilityApplicationMatrix extends StatelessWidget {
             const SizedBox(height: 16),
             const Divider(height: 1, color: DashboardTheme.cardBorder),
             const SizedBox(height: 16),
-            _SubmitStatus(success: submitSuccess, error: submitError),
+            _SubmitStatus(
+            success: submitSuccess,
+            error: submitError,
+            onRetry: submitError != null && onSubmit != null && !isSubmitting
+                ? onSubmit
+                : null,
+            isRetrying: isSubmitting,
+          ),
             const SizedBox(height: 12),
             _SubmitButton(
               isSubmitting: isSubmitting,
@@ -189,10 +196,12 @@ class _SubmitButton extends StatelessWidget {
 }
 
 class _SubmitStatus extends StatelessWidget {
-  const _SubmitStatus({this.success, this.error});
+  const _SubmitStatus({this.success, this.error, this.onRetry, this.isRetrying = false});
 
   final String? success;
   final String? error;
+  final VoidCallback? onRetry;
+  final bool isRetrying;
 
   @override
   Widget build(BuildContext context) {
@@ -243,6 +252,22 @@ class _SubmitStatus extends StatelessWidget {
                 ),
               ),
             ),
+            if (onRetry != null) ...[
+              const SizedBox(width: 8),
+              Semantics(
+                label: 'Retry: $error',
+                child: TextButton(
+                  onPressed: isRetrying ? null : onRetry,
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFFDC2626),
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text(isRetrying ? 'Retrying...' : 'Retry'),
+                ),
+              ),
+            ],
           ],
         ),
       );

@@ -53,8 +53,8 @@ class SDLCTab extends StatelessWidget {
       text: data.applicationMatrixHowToRead,
     );
 
-    final latestError = notifier.latestError;
-    final errorBanner = latestError != null
+    final errorMessage = notifier.latestError ?? notifier.submitError;
+    final errorBanner = errorMessage != null
         ? Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -72,13 +72,29 @@ class SDLCTab extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    latestError,
+                    errorMessage,
                     style: const TextStyle(
                       fontSize: 13,
                       color: Color(0xFF991B1B),
                     ),
                   ),
                 ),
+                if (notifier.submitError != null && isAuthenticated)
+                  Semantics(
+                    label: 'Retry: $errorMessage',
+                    child: TextButton(
+                      onPressed: notifier.submitting
+                          ? null
+                          : () => _handleSubmit(context),
+                      child: Text(
+                        notifier.submitting ? 'Retrying...' : 'Retry',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFFDC2626),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           )
@@ -91,7 +107,7 @@ class SDLCTab extends StatelessWidget {
           applicationMatrixHowToRead,
           const SizedBox(height: 20),
           errorBanner,
-          if (latestError != null) const SizedBox(height: 16),
+          if (errorMessage != null) const SizedBox(height: 16),
           matrix,
         ],
       ),

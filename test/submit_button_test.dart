@@ -227,11 +227,58 @@ void main() {
 
       await _tapSubmit(tester);
 
-      expect(find.text('Server error'), findsOneWidget);
+      // The error is shown in both the top banner and the inline matrix card banner.
+      expect(find.text('Server error'), findsNWidgets(2));
+      expect(find.text('Retry'), findsNWidgets(2));
       expect(teamSpy.fetchCallCount, 0);
 
       // Verify the matrix still reflects the toggle.
       expect(dashboardNotifier.data.applicationDomains[0].capabilityIds, contains(1));
+    });
+
+    testWidgets('matrix modification clears the submit error',
+        (tester) async {
+      final mockClient = MockClient((request) async {
+        return http.Response(
+          jsonEncode({'error': 'Server error'}),
+          500,
+        );
+      });
+
+      final dashboardNotifier = DashboardNotifier.forTesting(
+        httpClient: mockClient,
+      );
+      final authNotifier = AuthNotifier.forTesting(
+        user: const GitHubUser(
+          login: 'testuser',
+          name: 'Test User',
+          email: 'testuser@example.com',
+          avatarUrl: '',
+        ),
+        token: 'test-token',
+      );
+      final teamSpy = _TeamNotifierSpy();
+
+      await _pumpSdlcTab(
+        tester,
+        providers: [
+          ChangeNotifierProvider.value(value: authNotifier),
+          ChangeNotifierProvider.value(value: dashboardNotifier),
+          ChangeNotifierProvider<TeamNotifier>.value(value: teamSpy),
+        ],
+      );
+
+      await _tapSubmit(tester);
+      expect(find.text('Server error'), findsNWidgets(2));
+
+      // Toggle a cell after the failed submission; the error should be cleared.
+      dashboardNotifier.toggleDomainCapability(1, 1);
+      await tester.pumpAndSettle();
+      // Allow the persistence timer to fire so it is not pending on teardown.
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.text('Server error'), findsNothing);
+      expect(dashboardNotifier.submitError, isNull);
     });
 
     testWidgets('Submit button is disabled while request is in flight',
