@@ -410,8 +410,24 @@ def _json_payload() -> dict:
     return body
 
 
+def _validate_type(value: Any, expected_type: type, path: str) -> None:
+    """Raise ValidationError if value is not of the expected type."""
+    if not isinstance(value, expected_type):
+        raise ValidationError(f"{path} must be a {expected_type.__name__}")
+
+
+def _validate_non_null_string(value: Any, path: str) -> None:
+    """Raise ValidationError if value is not a non-null string."""
+    if not isinstance(value, str):
+        raise ValidationError(f"{path} must be a non-null string")
+
+
 def _validate_dashboard_payload(payload: dict) -> None:
-    """Validate required DashboardData fields before persistence."""
+    """Validate required DashboardData fields before persistence.
+
+    Reject payloads that would cause a Flutter TypeError when loaded because
+    a required String field is null or missing.
+    """
     dimensions = payload.get("dimensions")
     if not isinstance(dimensions, list) or len(dimensions) == 0:
         raise ValidationError("Payload must contain a non-empty 'dimensions' array")
@@ -420,6 +436,81 @@ def _validate_dashboard_payload(payload: dict) -> None:
         raise ValidationError(
             "Payload must contain a non-empty 'applicationDomains' array"
         )
+
+    # Top-level required String fields that Flutter casts with `as String`.
+    for field in ("title", "subtitle", "howToRead"):
+        _validate_non_null_string(payload.get(field), f"payload.{field}")
+
+    # Dimensions: required numeric/string fields.
+    for idx, dim in enumerate(dimensions):
+        path = f"dimensions[{idx}]"
+        if not isinstance(dim, dict):
+            raise ValidationError(f"{path} must be an object")
+        for field in ("id", "name", "score", "color", "descriptor"):
+            if field not in dim:
+                raise ValidationError(f"{path} missing required field '{field}'")
+        _validate_type(dim["id"], int, f"{path}.id")
+        _validate_non_null_string(dim["name"], f"{path}.name")
+        _validate_non_null_string(dim["color"], f"{path}.color")
+        _validate_non_null_string(dim["descriptor"], f"{path}.descriptor")
+        _validate_type(dim["score"], (int, float), f"{path}.score")
+
+    # Application domains: required fields.
+    for idx, domain in enumerate(application_domains):
+        path = f"applicationDomains[{idx}]"
+        if not isinstance(domain, dict):
+            raise ValidationError(f"{path} must be an object")
+        for field in (
+            "id",
+            "name",
+            "shortName",
+            "applicability",
+            "involvement",
+            "value",
+            "confidence",
+            "capabilityIds",
+        ):
+            if field not in domain:
+                raise ValidationError(f"{path} missing required field '{field}'")
+        _validate_type(domain["id"], int, f"{path}.id")
+        _validate_non_null_string(domain["name"], f"{path}.name")
+        _validate_non_null_string(domain["shortName"], f"{path}.shortName")
+        _validate_non_null_string(domain["applicability"], f"{path}.applicability")
+        _validate_non_null_string(domain["involvement"], f"{path}.involvement")
+        _validate_non_null_string(domain["value"], f"{path}.value")
+        _validate_non_null_string(domain["confidence"], f"{path}.confidence")
+        _validate_type(domain["capabilityIds"], list, f"{path}.capabilityIds")
+
+    # Maturity levels: required String fields.
+    maturity_scale = payload.get("maturityScale")
+    if isinstance(maturity_scale, list):
+        for idx, level in enumerate(maturity_scale):
+            path = f"maturityScale[{idx}]"
+            if not isinstance(level, dict):
+                raise ValidationError(f"{path} must be an object")
+            for field in ("level", "label", "color", "description"):
+                if field not in level:
+                    raise ValidationError(f"{path} missing required field '{field}'")
+            _validate_type(level["level"], int, f"{path}.level")
+            _validate_non_null_string(level["label"], f"{path}.label")
+            _validate_non_null_string(level["color"], f"{path}.color")
+            _validate_non_null_string(level["description"], f"{path}.description")
+
+    # Tiers: required String fields.
+    tiers = payload.get("tiers")
+    if isinstance(tiers, dict):
+        for tier_name in ("high", "medium", "low"):
+            tier = tiers.get(tier_name)
+            if not isinstance(tier, dict):
+                raise ValidationError(f"tiers.{tier_name} must be an object")
+            for field in ("label", "color", "min"):
+                if field not in tier:
+                    raise ValidationError(
+                        f"tiers.{tier_name} missing required field '{field}'"
+                    )
+            _validate_non_null_string(tier["label"], f"tiers.{tier_name}.label")
+            _validate_non_null_string(tier["color"], f"tiers.{tier_name}.color")
+            _validate_type(tier["min"], (int, float), f"tiers.{tier_name}.min")
 
 
 def _row_to_submission(row: tuple) -> dict:

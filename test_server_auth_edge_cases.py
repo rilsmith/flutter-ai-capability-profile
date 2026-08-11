@@ -326,8 +326,11 @@ def test_create_submission_returns_500_when_db_fails(client, monkeypatch):
     resp = client.post(
         "/api/submissions",
         json={
+            "title": "Test",
+            "subtitle": "Test",
+            "howToRead": "",
             "dimensions": [
-                {"id": 1, "name": "D1", "score": 1.0, "color": "#000"}
+                {"id": 1, "name": "D1", "score": 1.0, "color": "#000", "descriptor": "D1"}
             ],
             "applicationDomains": [
                 {
@@ -341,6 +344,11 @@ def test_create_submission_returns_500_when_db_fails(client, monkeypatch):
                     "capabilityIds": [],
                 }
             ],
+            "tiers": {
+                "high": {"label": "", "color": "", "min": 4.0},
+                "medium": {"label": "", "color": "", "min": 2.5},
+                "low": {"label": "", "color": "", "min": 1.0},
+            },
         },
         headers={"Authorization": "Bearer token"},
     )

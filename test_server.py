@@ -310,9 +310,10 @@ def test_post_submission_accepts_unverified_email_when_flag_enabled(client, monk
 def _sample_payload(**overrides):
     payload = {
         "title": "Test Dashboard",
+        "subtitle": "Test subtitle",
         "dimensions": [
-            {"id": 1, "name": "Prompt Engineering", "score": 3.0, "color": "#2563EB"},
-            {"id": 2, "name": "Context Engineering", "score": 4.0, "color": "#0D9488"},
+            {"id": 1, "name": "Prompt Engineering", "score": 3.0, "color": "#2563EB", "descriptor": "Intent specification"},
+            {"id": 2, "name": "Context Engineering", "score": 4.0, "color": "#0D9488", "descriptor": "Context shaping"},
         ],
         "applicationDomains": [
             {
@@ -501,6 +502,158 @@ def test_post_submission_rejects_empty_application_domains(client, monkeypatch):
     assert "applicationdomains" in resp.json["error"].lower()
 
 
+def test_post_submission_rejects_null_title(client, monkeypatch):
+    _set_auth(monkeypatch)
+    payload = _sample_payload(title=None)
+    resp = client.post(
+        "/api/submissions",
+        json=payload,
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 400
+    assert "title" in resp.json["error"].lower()
+
+
+def test_post_submission_rejects_null_subtitle(client, monkeypatch):
+    _set_auth(monkeypatch)
+    payload = _sample_payload(subtitle=None)
+    resp = client.post(
+        "/api/submissions",
+        json=payload,
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 400
+    assert "subtitle" in resp.json["error"].lower()
+
+
+def test_post_submission_rejects_null_how_to_read(client, monkeypatch):
+    _set_auth(monkeypatch)
+    payload = _sample_payload(howToRead=None)
+    resp = client.post(
+        "/api/submissions",
+        json=payload,
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 400
+    assert "howtoread" in resp.json["error"].lower()
+
+
+def test_post_submission_rejects_null_dimension_name(client, monkeypatch):
+    _set_auth(monkeypatch)
+    payload = _sample_payload(
+        dimensions=[
+            {"id": 1, "name": None, "score": 3.0, "color": "#000", "descriptor": "D"}
+        ]
+    )
+    resp = client.post(
+        "/api/submissions",
+        json=payload,
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 400
+    assert "name" in resp.json["error"].lower()
+
+
+def test_post_submission_rejects_null_dimension_color(client, monkeypatch):
+    _set_auth(monkeypatch)
+    payload = _sample_payload(
+        dimensions=[
+            {"id": 1, "name": "D1", "score": 3.0, "color": None, "descriptor": "D"}
+        ]
+    )
+    resp = client.post(
+        "/api/submissions",
+        json=payload,
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 400
+    assert "color" in resp.json["error"].lower()
+
+
+def test_post_submission_rejects_null_dimension_descriptor(client, monkeypatch):
+    _set_auth(monkeypatch)
+    payload = _sample_payload(
+        dimensions=[
+            {"id": 1, "name": "D1", "score": 3.0, "color": "#000", "descriptor": None}
+        ]
+    )
+    resp = client.post(
+        "/api/submissions",
+        json=payload,
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 400
+    assert "descriptor" in resp.json["error"].lower()
+
+
+def test_post_submission_rejects_null_domain_name(client, monkeypatch):
+    _set_auth(monkeypatch)
+    payload = _sample_payload(
+        applicationDomains=[
+            {
+                "id": 1,
+                "name": None,
+                "shortName": "A",
+                "applicability": "in_scope",
+                "involvement": "none",
+                "value": "low",
+                "confidence": "low",
+                "capabilityIds": [],
+            }
+        ]
+    )
+    resp = client.post(
+        "/api/submissions",
+        json=payload,
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 400
+    assert "name" in resp.json["error"].lower()
+
+
+def test_post_submission_rejects_null_domain_short_name(client, monkeypatch):
+    _set_auth(monkeypatch)
+    payload = _sample_payload(
+        applicationDomains=[
+            {
+                "id": 1,
+                "name": "Domain A",
+                "shortName": None,
+                "applicability": "in_scope",
+                "involvement": "none",
+                "value": "low",
+                "confidence": "low",
+                "capabilityIds": [],
+            }
+        ]
+    )
+    resp = client.post(
+        "/api/submissions",
+        json=payload,
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 400
+    assert "shortname" in resp.json["error"].lower()
+
+
+def test_post_submission_rejects_null_tier_label(client, monkeypatch):
+    _set_auth(monkeypatch)
+    payload = _sample_payload(
+        tiers={
+            "high": {"label": None, "color": "", "min": 4.0},
+            "medium": {"label": "", "color": "", "min": 2.5},
+            "low": {"label": "", "color": "", "min": 1.0},
+        }
+    )
+    resp = client.post(
+        "/api/submissions",
+        json=payload,
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 400
+    assert "label" in resp.json["error"].lower()
+
+
 def test_post_submission_closes_db_connection(client, monkeypatch):
     """Connection leak fix: the endpoint must close the psycopg2 connection."""
     _set_auth(monkeypatch)
@@ -558,14 +711,14 @@ def test_get_submissions_me_returns_latest(client, monkeypatch, db_conn):
         db_conn,
         "user1",
         "jbellows",
-        _sample_payload(dimensions=[{"id": 1, "name": "D1", "score": 1.0, "color": "#000"}]),
+        _sample_payload(dimensions=[{"id": 1, "name": "D1", "score": 1.0, "color": "#000", "descriptor": "D1"}]),
         "2024-01-01T00:00:00+00:00",
     )
     _insert_submission(
         db_conn,
         "user1",
         "jbellows",
-        _sample_payload(dimensions=[{"id": 1, "name": "D1", "score": 5.0, "color": "#000"}]),
+        _sample_payload(dimensions=[{"id": 1, "name": "D1", "score": 5.0, "color": "#000", "descriptor": "D1"}]),
         "2024-01-02T00:00:00+00:00",
     )
     resp = client.get(
@@ -611,14 +764,14 @@ def test_get_submissions_team_returns_latest_per_user(client, monkeypatch, db_co
         db_conn,
         "user1",
         "jbellows",
-        _sample_payload(dimensions=[{"id": 1, "name": "D1", "score": 5.0, "color": "#000"}]),
+        _sample_payload(dimensions=[{"id": 1, "name": "D1", "score": 5.0, "color": "#000", "descriptor": "D1"}]),
         "2024-01-02T00:00:00+00:00",
     )
     _insert_submission(
         db_conn,
         "user1",
         "jbellows",
-        _sample_payload(dimensions=[{"id": 1, "name": "D1", "score": 1.0, "color": "#000"}]),
+        _sample_payload(dimensions=[{"id": 1, "name": "D1", "score": 1.0, "color": "#000", "descriptor": "D1"}]),
         "2024-01-01T00:00:00+00:00",
     )
     # user2 latest
@@ -626,7 +779,7 @@ def test_get_submissions_team_returns_latest_per_user(client, monkeypatch, db_co
         db_conn,
         "user2",
         "jbellows",
-        _sample_payload(dimensions=[{"id": 1, "name": "D1", "score": 3.0, "color": "#000"}]),
+        _sample_payload(dimensions=[{"id": 1, "name": "D1", "score": 3.0, "color": "#000", "descriptor": "D1"}]),
         "2024-01-01T00:00:00+00:00",
     )
     resp = client.get(
@@ -678,8 +831,8 @@ def test_get_submissions_team_aggregate_returns_averages(client, monkeypatch, db
         "jbellows",
         _sample_payload(
             dimensions=[
-                {"id": 1, "name": "D1", "score": 2.0, "color": "#000"},
-                {"id": 2, "name": "D2", "score": 4.0, "color": "#fff"},
+                {"id": 1, "name": "D1", "score": 2.0, "color": "#000", "descriptor": "D1"},
+                {"id": 2, "name": "D2", "score": 4.0, "color": "#fff", "descriptor": "D2"},
             ],
             applicationDomains=[
                 {
@@ -702,8 +855,8 @@ def test_get_submissions_team_aggregate_returns_averages(client, monkeypatch, db
         "jbellows",
         _sample_payload(
             dimensions=[
-                {"id": 1, "name": "D1", "score": 4.0, "color": "#000"},
-                {"id": 2, "name": "D2", "score": 6.0, "color": "#fff"},
+                {"id": 1, "name": "D1", "score": 4.0, "color": "#000", "descriptor": "D1"},
+                {"id": 2, "name": "D2", "score": 6.0, "color": "#fff", "descriptor": "D2"},
             ],
             applicationDomains=[
                 {
@@ -744,7 +897,7 @@ def test_get_submissions_team_aggregate_uses_latest_per_user(client, monkeypatch
         "user1",
         "jbellows",
         _sample_payload(
-            dimensions=[{"id": 1, "name": "D1", "score": 1.0, "color": "#000"}]
+            dimensions=[{"id": 1, "name": "D1", "score": 1.0, "color": "#000", "descriptor": "D1"}]
         ),
         "2024-01-01T00:00:00+00:00",
     )
@@ -753,7 +906,7 @@ def test_get_submissions_team_aggregate_uses_latest_per_user(client, monkeypatch
         "user1",
         "jbellows",
         _sample_payload(
-            dimensions=[{"id": 1, "name": "D1", "score": 5.0, "color": "#000"}]
+            dimensions=[{"id": 1, "name": "D1", "score": 5.0, "color": "#000", "descriptor": "D1"}]
         ),
         "2024-01-02T00:00:00+00:00",
     )
@@ -772,7 +925,7 @@ def test_get_submissions_team_aggregate_excludes_other_managers(client, monkeypa
         "otheruser",
         "othermanager",
         _sample_payload(
-            dimensions=[{"id": 1, "name": "D1", "score": 9.0, "color": "#000"}]
+            dimensions=[{"id": 1, "name": "D1", "score": 9.0, "color": "#000", "descriptor": "D1"}]
         ),
         "2024-01-01T00:00:00+00:00",
     )
