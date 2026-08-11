@@ -15,3 +15,6 @@ data:
   # In Kubernetes the API serves only API/OAuth routes; disable static serving.
   SERVE_STATIC: "false"
   WEB_DIR: "/app/build/web"
+  # Local-dev/test escape hatch: accept an unverified primary email for the
+  # GitHub test token used in agent-browser end-to-end validation.
+  ALLOW_UNVERIFIED_TEST_EMAIL: "true"
