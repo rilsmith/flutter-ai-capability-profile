@@ -63,9 +63,9 @@ Copy `.env.example` to `.env` and fill in the real values. `.env` is ignored by 
 
 | Variable | Purpose | Example |
 |---|---|---|
-| `GITHUB_CLIENT_ID` | GitHub OAuth app client ID | `Iv23li9PMJlRJ1KJyIVJ` |
-| `GITHUB_CLIENT_SECRET` | GitHub OAuth app client secret | (sensitive) |
-| `REDIRECT_URI` | OAuth callback URL for local dev | `http://localhost:5000/auth` |
+| `GITHUB_CLIENT_ID` | GitHub OAuth app client ID | `YOUR_GITHUB_CLIENT_ID` |
+| `GITHUB_CLIENT_SECRET` | GitHub OAuth app client secret | `YOUR_GITHUB_CLIENT_SECRET` |
+| `REDIRECT_URI` | OAuth callback URL for local dev | `YOUR_REDIRECT_URI` |
 | `LDAP_URL` | Internal LDAP server | `ldap://ldap.loc.adobe.net` |
 | `LDAP_BASE_DN` | LDAP search base | `o=adbe` |
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://postgres:postgres@localhost:5432/capability_dashboard` |
@@ -178,11 +178,11 @@ You can regenerate the Secret safely with:
 
 ```bash
 kubectl create secret generic ai-capability-dashboard-secret \
-  --from-literal=GITHUB_CLIENT_ID=... \
-  --from-literal=GITHUB_CLIENT_SECRET=... \
-  --from-literal=REDIRECT_URI=https://ai-capability-dashboard.corp.ethos270-stage-va7.ethos.adobe.net/auth \
-  --from-literal=DATABASE_URL=... \
-  --from-literal=POSTGRES_PASSWORD=... \
+  --from-literal=GITHUB_CLIENT_ID=YOUR_GITHUB_CLIENT_ID \
+  --from-literal=GITHUB_CLIENT_SECRET=YOUR_GITHUB_CLIENT_SECRET \
+  --from-literal=REDIRECT_URI=YOUR_REDIRECT_URI \
+  --from-literal=DATABASE_URL=YOUR_DATABASE_URL \
+  --from-literal=POSTGRES_PASSWORD=YOUR_POSTGRES_PASSWORD \
   -n ns-team-ads-test --dry-run=client -o yaml > k8s/secret.yaml
 ```
 
@@ -191,8 +191,8 @@ kubectl create secret generic ai-capability-dashboard-secret \
 The cluster pulls images from the Adobe internal registry. Build, tag, and push both images:
 
 ```bash
-flutter build web --dart-define=GITHUB_CLIENT_ID=YOUR_CLIENT_ID \
-  --dart-define=REDIRECT_URI=https://ai-capability-dashboard.corp.ethos270-stage-va7.ethos.adobe.net/auth \
+flutter build web --dart-define=GITHUB_CLIENT_ID=YOUR_GITHUB_CLIENT_ID \
+  --dart-define=REDIRECT_URI=YOUR_REDIRECT_URI \
   --dart-define=ALLOW_UNVERIFIED_TEST_EMAIL=true
 
 REG=docker-ads-release.dr-uw2.adobeitc.com

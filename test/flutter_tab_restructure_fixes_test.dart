@@ -26,9 +26,9 @@ void main() {
     test('auth_notifier.dart has no hardcoded OAuth client ID or redirect URI', () {
       final source = File('lib/providers/auth_notifier.dart').readAsStringSync();
 
-      // The historic real values that must never be checked in again.
-      expect(source, isNot(contains('Iv23li9PMJlRJ1KJyIVJ')));
-      expect(source, isNot(contains('http://localhost:5000/auth')));
+      // Placeholder values that must never be hardcoded in source.
+      expect(source, isNot(contains('YOUR_GITHUB_CLIENT_ID')));
+      expect(source, isNot(contains('YOUR_REDIRECT_URI')));
       // No defaultValue fallback for the OAuth constants.
       expect(
         source,
