@@ -951,8 +951,11 @@ def test_get_submissions_team_aggregate_returns_averages(client, monkeypatch, db
     data = resp.json
     assert data["member_count"] == 2
     dims = {d["id"]: d for d in data["dimensions"]}
+    # Dimension scores are now derived from capability link reach, not stored scores.
+    # Domain A links capability 1 (dim 1) for user1 and capabilities 2,3 (dim 2)
+    # for user2, so each dimension is linked in one of the two users -> average 3.0.
     assert dims[1]["average"] == 3.0
-    assert dims[2]["average"] == 5.0
+    assert dims[2]["average"] == 3.0
     domains = {d["id"]: d for d in data["domains"]}
     assert domains[1]["involvement_average"] == 1.5
     assert domains[1]["value_average"] == 1.5
@@ -985,7 +988,9 @@ def test_get_submissions_team_aggregate_uses_latest_per_user(client, monkeypatch
         headers={"Authorization": "Bearer valid_token"},
     )
     dims = {d["id"]: d for d in resp.json["dimensions"]}
-    assert dims[1]["average"] == 5.0
+    # Dimension scores are derived from capability link reach. The default
+    # sample payload links capability 1 in one of two domains, so dim 1 gets 3.0.
+    assert dims[1]["average"] == 3.0
 
 
 def test_get_submissions_team_aggregate_excludes_other_managers(client, monkeypatch, db_conn):
@@ -1018,6 +1023,40 @@ def test_get_submissions_team_aggregate_returns_empty_when_no_submissions(client
     assert resp.json["member_count"] == 0
     assert resp.json["dimensions"] == []
     assert resp.json["domains"] == []
+
+
+def test_get_submissions_team_aggregate_normalizes_involvement_from_capability_links(
+    client, monkeypatch, db_conn
+):
+    _set_auth(monkeypatch, uid="user1")
+    _insert_submission(
+        db_conn,
+        "user1",
+        "jbellows",
+        _sample_payload(
+            applicationDomains=[
+                {
+                    "id": 1,
+                    "name": "Domain A",
+                    "shortName": "A",
+                    "applicability": "in_scope",
+                    "involvement": "none",
+                    "value": "low",
+                    "confidence": "low",
+                    "capabilityIds": [1],
+                },
+            ]
+        ),
+        "2024-01-01T00:00:00+00:00",
+    )
+    resp = client.get(
+        "/api/submissions/team/aggregate",
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 200
+    domains = {d["id"]: d for d in resp.json["domains"]}
+    assert domains[1]["involvement_average"] == 1.0
+    assert domains[1]["active_count"] == 1
 
 
 # ── Static files (local development) ─────────────────────────────────────────

@@ -29,6 +29,31 @@ Map<String, dynamic> _payloadWithLinks() {
   return defaultDashboardData.copyWith(applicationDomains: domains).toJson();
 }
 
+Map<String, dynamic> _payloadWithLinksButNeverInvolvement() {
+  final domains = defaultDashboardData.applicationDomains.map((d) {
+    if (d.id == 1) {
+      return d.copyWith(
+        capabilityIds: const [1],
+        involvement: DomainInvolvement.none,
+      );
+    }
+    return d;
+  }).toList();
+  return defaultDashboardData.copyWith(applicationDomains: domains).toJson();
+}
+
+Map<String, dynamic> _payloadWithNotApplicableDeployment() {
+  final domains = defaultDashboardData.applicationDomains.map((d) {
+    if (d.shortName == 'Deployment') {
+      return d.copyWith(
+        applicability: DomainApplicability.notApplicable,
+      );
+    }
+    return d;
+  }).toList();
+  return defaultDashboardData.copyWith(applicationDomains: domains).toJson();
+}
+
 void main() {
   group('DashboardNotifier.loadLatestSubmission', () {
     setUp(() async {
@@ -68,6 +93,64 @@ void main() {
       expect(notifier.loadingLatest, isFalse);
       expect(notifier.latestError, isNull);
       expect(notifier.latestLoaded, isTrue);
+    });
+
+    testWidgets('normalizes involvement from never to occasional when links exist',
+        (tester) async {
+      final mockClient = MockClient((request) async {
+        return http.Response(
+          jsonEncode({
+            'id': '123e4567-e89b-12d3-a456-426614174000',
+            'submitted_at': '2024-01-01T00:00:00Z',
+            'payload': _payloadWithLinksButNeverInvolvement(),
+          }),
+          200,
+          headers: const {'content-type': 'application/json'},
+        );
+      });
+
+      final notifier = DashboardNotifier.forTesting(
+        httpClient: mockClient,
+        skipApiCalls: false,
+      );
+
+      final future = notifier.loadLatestSubmission('test-token');
+      await tester.pumpAndSettle();
+      await future;
+
+      final firstDomain = notifier.data.applicationDomains.first;
+      expect(firstDomain.capabilityIds, contains(1));
+      expect(firstDomain.involvement, DomainInvolvement.occasional);
+    });
+
+    testWidgets('resets saved not-applicable domains back to in scope',
+        (tester) async {
+      final mockClient = MockClient((request) async {
+        return http.Response(
+          jsonEncode({
+            'id': '123e4567-e89b-12d3-a456-426614174000',
+            'submitted_at': '2024-01-01T00:00:00Z',
+            'payload': _payloadWithNotApplicableDeployment(),
+          }),
+          200,
+          headers: const {'content-type': 'application/json'},
+        );
+      });
+
+      final notifier = DashboardNotifier.forTesting(
+        httpClient: mockClient,
+        skipApiCalls: false,
+      );
+
+      final future = notifier.loadLatestSubmission('test-token');
+      await tester.pumpAndSettle();
+      await future;
+
+      final deploymentDomain = notifier.data.applicationDomains.firstWhere(
+        (d) => d.shortName == 'Deployment',
+      );
+      expect(deploymentDomain.isNotApplicable, isFalse);
+      expect(deploymentDomain.applicability, DomainApplicability.inScope);
     });
 
     testWidgets('falls back to defaults on 404', (tester) async {
@@ -248,11 +331,11 @@ void main() {
       await tester.pump();
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
       expect(find.text('Loading your latest submission...'), findsOneWidget);
-      expect(find.text('Capability × Domain Links'), findsNothing);
+      expect(find.text('AI × SDLC Adoption Matrix'), findsNothing);
 
       // Allow the delayed request to complete and the widget to rebuild.
       await tester.pumpAndSettle(const Duration(milliseconds: 200));
-      expect(find.text('Capability × Domain Links'), findsOneWidget);
+      expect(find.text('AI × SDLC Adoption Matrix'), findsOneWidget);
     });
 
     testWidgets('shows matrix after successful load', (tester) async {
@@ -301,7 +384,7 @@ void main() {
       await future;
 
       expect(find.text('Loading your latest submission...'), findsNothing);
-      expect(find.text('Capability × Domain Links'), findsOneWidget);
+      expect(find.text('AI × SDLC Adoption Matrix'), findsOneWidget);
       expect(dashboardNotifier.data.applicationDomains[0].capabilityIds, contains(1));
     });
 
@@ -348,7 +431,7 @@ void main() {
       await future;
 
       expect(find.text('Server error'), findsOneWidget);
-      expect(find.text('Capability × Domain Links'), findsOneWidget);
+      expect(find.text('AI × SDLC Adoption Matrix'), findsOneWidget);
       expect(dashboardNotifier.data.applicationDomains[0].capabilityIds, isEmpty);
     });
   });

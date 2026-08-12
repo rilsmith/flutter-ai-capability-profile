@@ -255,7 +255,7 @@ class _EditPanelState extends State<EditPanel> {
                       ),
                     ),
                     _Field(
-                      label: 'How to Read — Capability × Domain',
+                      label: 'How to Read — AI × SDLC Adoption Matrix',
                       child: TextField(
                         controller: _applicationMatrixHowToReadController,
                         onChanged: notifier.updateApplicationMatrixHowToRead,

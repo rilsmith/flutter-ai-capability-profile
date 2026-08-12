@@ -49,7 +49,7 @@ class SDLCTab extends StatelessWidget {
     );
 
     final applicationMatrixHowToRead = HowToReadCard(
-      title: 'How to Read — Capability × Domain',
+      title: 'How to Read — AI × SDLC Adoption Matrix',
       text: data.applicationMatrixHowToRead,
     );
 
@@ -124,7 +124,9 @@ class SDLCTab extends StatelessWidget {
     await dashboard.submit(token);
 
     if (dashboard.submitSuccess != null) {
-      team.fetchTeamData(token, force: true);
+      // Refresh team aggregate so the coverage strip, radar chart, and
+      // profile insights all recalculate before the success message appears.
+      await team.fetchTeamData(token, force: true);
     }
   }
 }

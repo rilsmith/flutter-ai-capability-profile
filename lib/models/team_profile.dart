@@ -20,10 +20,10 @@ class TeamProfile {
   }
 
   List<double> get averages {
-    if (members.isEmpty) return List.filled(9, 0.0);
-    final sums = List.filled(9, 0.0);
+    if (members.isEmpty) return List.filled(5, 0.0);
+    final sums = List.filled(5, 0.0);
     for (final m in members) {
-      for (var i = 0; i < m.scores.length && i < 9; i++) {
+      for (var i = 0; i < m.scores.length && i < 5; i++) {
         sums[i] += m.scores[i];
       }
     }
@@ -31,10 +31,10 @@ class TeamProfile {
   }
 
   List<double> get mins {
-    if (members.isEmpty) return List.filled(9, 0.0);
-    final result = List.filled(9, double.infinity);
+    if (members.isEmpty) return List.filled(5, 0.0);
+    final result = List.filled(5, double.infinity);
     for (final m in members) {
-      for (var i = 0; i < m.scores.length && i < 9; i++) {
+      for (var i = 0; i < m.scores.length && i < 5; i++) {
         if (m.scores[i] < result[i]) result[i] = m.scores[i];
       }
     }
@@ -42,10 +42,10 @@ class TeamProfile {
   }
 
   List<double> get maxs {
-    if (members.isEmpty) return List.filled(9, 0.0);
-    final result = List.filled(9, double.negativeInfinity);
+    if (members.isEmpty) return List.filled(5, 0.0);
+    final result = List.filled(5, double.negativeInfinity);
     for (final m in members) {
-      for (var i = 0; i < m.scores.length && i < 9; i++) {
+      for (var i = 0; i < m.scores.length && i < 5; i++) {
         if (m.scores[i] > result[i]) result[i] = m.scores[i];
       }
     }

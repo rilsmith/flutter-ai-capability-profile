@@ -8,78 +8,50 @@ const storageKey = 'ai-capability-dashboard-data';
 
 const defaultDashboardData = DashboardData(
   title: 'Agentic Engineering Capability Profile',
-  subtitle: 'Assessing 9 capability dimensions mapping the 8 levels of agentic engineering across the spectrum from vibe coding to software dark factories',
+  subtitle: 'Assessing 5 capability dimensions mapping the progression from individual AI interaction to autonomous agentic automation',
   intro:
       '''
-      Many frameworks exist for evaluating maturity of agentic engineering, but they run into common maturity model pitfalls. While the concepts are useful for establishing a thought framework, these maturity models linearize AI skill progression by representing it as a sequential path of advancement when it is actually a multidimensional capability landscape. These tools attempt to capture the multidimensional nature of agentic engineering by assessing capability in 9 dimensions that map to the 8 levels of agentic engineering.
+      Many frameworks exist for evaluating maturity of agentic engineering, but they run into common maturity model pitfalls. While the concepts are useful for establishing a thought framework, these maturity models linearize AI skill progression by representing it as a sequential path of advancement when it is actually a multidimensional capability landscape. These tools attempt to capture the multidimensional nature of agentic engineering by assessing capability in 5 dimensions that map to the progression from individual interaction to autonomous agentic automation.
 
-      The first five dimensions represent core competencies — the individual skills that make an engineer effective with AI, spanning Levels 1 through 5 (interaction, context engineering, compounding engineering, tool and capability engineering, and evaluation). The remaining four represent applied automation — how those skills compound into autonomous agentic workflows and ultimately software dark factories, spanning Levels 6 through 8 (harness engineering, automated feedback loops, orchestration and background agents, and autonomous agent systems).
+      The five dimensions form a coherent capability stack. Prompt Engineering and Context Engineering are the foundation — how you specify intent and shape the information agents work with. Tool / Skill Engineering extends that foundation into reusable capabilities and interfaces. Harness Engineering builds assurance, guardrails, and observability around those capabilities. Agentic Automation is the apex — autonomous workflows and systems that compound the preceding skills into self-directed engineering.
 
       AI has not changed the core principles of effective software engineering. This is important because healthy teams consist of individuals with complementary skill sets. The most effective teams are those that have a balance of individuals with different capabilities, and that can collaborate effectively to solve problems. This is still true for agentic engineering.
       ''',
   dimensions: [
     Dimension(
       id: 1,
-      name: 'Prompt & Interaction Design',
+      name: 'Prompt Engineering',
       score: 3.0,
       color: '#2563EB',
-      descriptor: 'Tab complete, agent IDE, plan mode, conductor-mode, specifying intent',
+      descriptor: 'Craft effective instructions, examples, constraints, and output formats.',
     ),
     Dimension(
       id: 2,
       name: 'Context Engineering',
       score: 3.0,
       color: '#0D9488',
-      descriptor: 'Static/dynamic context, rules files, the 6 context types, information density',
+      descriptor: 'Manage what the agent knows: memory, AGENTS.md, retrieval, relevant files, and token budgets.',
     ),
     Dimension(
       id: 3,
-      name: 'Compounding Engineering',
+      name: 'Tool / Skill Engineering',
       score: 3.0,
-      color: '#16A34A',
-      descriptor: 'Plan, delegate, assess, codify loop; persistent learning, codifying lessons',
+      color: '#CA8A04',
+      descriptor: 'Extend what the agent can do with tools, APIs, MCP servers, and reusable skills.',
     ),
     Dimension(
       id: 4,
-      name: 'Tool & Capability Engineering',
-      score: 3.0,
-      color: '#CA8A04',
-      descriptor: 'MCPs, skills, CLI tools, capability expansion, progressive disclosure',
-    ),
-    Dimension(
-      id: 5,
-      name: 'Evaluation & Verification',
-      score: 3.0,
-      color: '#EA580C',
-      descriptor: 'Tests, evals, trajectory/output assessment, quality flywheel',
-    ),
-    Dimension(
-      id: 6,
       name: 'Harness Engineering',
       score: 3.0,
       color: '#7C3AED',
-      descriptor: 'Sandboxes, guardrails, hooks, observability, security boundaries',
+      descriptor: 'Make agent execution safe and reliable with cost caps, permission tiers, sandboxes, network/execution isolation, approvals, and validation.',
     ),
     Dimension(
-      id: 7,
-      name: 'Automated Feedback Loops',
-      score: 3.0,
-      color: '#DB2777',
-      descriptor: 'Backpressure, self-correction, CI quality gates, think-act-observe loop',
-    ),
-    Dimension(
-      id: 8,
-      name: 'Orchestration & Background Agents',
-      score: 3.0,
-      color: '#4F46E5',
-      descriptor: 'Task decomposition, async delegation, multi-agent dispatch, orchestrator mode',
-    ),
-    Dimension(
-      id: 9,
-      name: 'Autonomous Agent Systems',
+      id: 5,
+      name: 'Agentic Automation',
       score: 3.0,
       color: '#DC2626',
-      descriptor: 'Factory model, spec-driven dev, agent teams, software dark factories',
+      descriptor: 'Run trusted agent workflows automatically through schedules, events, monitoring, and human escalation.',
     ),
   ],
   applicationDomains: [
@@ -208,7 +180,7 @@ const defaultDashboardData = DashboardData(
   ],
   howToRead:
       '''
-      Higher scores (toward the outer ring) indicate stronger capability in that dimension. The first five dimensions (1–5) represent core competencies — the individual skills for working effectively with AI (Levels 1-5: tab complete through MCPs and skills). Dimensions 6–9 represent applied automation — how those skills compound into systems that build software at scale (Levels 6-8: harness engineering through autonomous agent teams).
+      Higher scores (toward the outer ring) indicate stronger capability in that dimension. The five dimensions form a progression from individual interaction to autonomous systems: Prompt Engineering (specifying intent), Context Engineering (shaping information), Tool / Skill Engineering (reusable capabilities), Harness Engineering (assurance and guardrails), and Agentic Automation (autonomous workflows and agent teams).
       
       To illustrate the importance of individuals with complementary capabilities, the capability scores are translated into a "class" just like how an effective RPG party might have a mix of characters with different abilities.
       ''',

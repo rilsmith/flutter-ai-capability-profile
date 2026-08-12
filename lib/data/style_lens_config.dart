@@ -124,42 +124,18 @@ const styleLensConfig = StyleLensConfig(
       commander: 0.10,
     ),
     3: DimensionSymbolWeights(
-      warrior: 0.10,
-      paladin: 0.10,
-      artificer: 0.50,
-      commander: 0.30,
-    ),
-    4: DimensionSymbolWeights(
       warrior: 0.15,
       paladin: 0.10,
       artificer: 0.70,
       commander: 0.05,
     ),
-    5: DimensionSymbolWeights(
-      warrior: 0.05,
-      paladin: 0.80,
-      artificer: 0.15,
-      commander: 0.00,
-    ),
-    6: DimensionSymbolWeights(
+    4: DimensionSymbolWeights(
       warrior: 0.05,
       paladin: 0.75,
       artificer: 0.10,
       commander: 0.10,
     ),
-    7: DimensionSymbolWeights(
-      warrior: 0.10,
-      paladin: 0.25,
-      artificer: 0.45,
-      commander: 0.20,
-    ),
-    8: DimensionSymbolWeights(
-      warrior: 0.20,
-      paladin: 0.05,
-      artificer: 0.10,
-      commander: 0.65,
-    ),
-    9: DimensionSymbolWeights(
+    5: DimensionSymbolWeights(
       warrior: 0.00,
       paladin: 0.15,
       artificer: 0.20,

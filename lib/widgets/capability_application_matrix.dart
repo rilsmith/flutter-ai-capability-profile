@@ -52,7 +52,7 @@ class CapabilityApplicationMatrix extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Capability × Domain Links', style: DashboardTheme.cardHeading),
+          Text('AI × SDLC Adoption Matrix', style: DashboardTheme.cardHeading),
           const SizedBox(height: 6),
           const Text(
             'Tap ⓘ beside a capability for its definition. Tap cells to toggle links.',
@@ -353,7 +353,6 @@ class _CapabilityColumn extends StatelessWidget {
                           onPressed: () => showCapabilityDefinitionDialog(
                             context,
                             dimension,
-                            maxScore: maxScore,
                           ),
                         ),
                       ],

@@ -558,6 +558,50 @@ def _latest_team_submissions(manager_uid: str) -> list:
         conn.close()
 
 
+def _normalized_involvement(domain: dict, total_capabilities: int) -> str:
+    """Return an involvement value derived from capability link coverage.
+
+    Since the edit panel was removed, involvement is derived from the matrix:
+    - no capability links -> 'none'
+    - all capabilities linked -> 'regular'
+    - some capabilities linked -> 'occasional'
+    """
+    capability_ids = domain.get("capabilityIds", []) or []
+    if not capability_ids:
+        return "none"
+    if len(capability_ids) >= total_capabilities:
+        return "regular"
+    return "occasional"
+
+
+def _derived_dimension_score(dim_id: int, application_domains: list) -> float:
+    """Derive a capability dimension score from how many domains link it.
+
+    Since the edit panel was removed, dimension scores are no longer set
+    independently. The matrix (capability links) becomes the source of truth
+    for dimension strength.
+    """
+    in_scope = [
+        d
+        for d in application_domains
+        if d.get("applicability", "in_scope") == "in_scope"
+    ]
+    total = len(in_scope)
+    if total == 0:
+        return 1.0
+    linked = sum(1 for d in in_scope if dim_id in (d.get("capabilityIds", []) or []))
+    ratio = linked / total
+    if ratio == 0:
+        return 1.0
+    if ratio <= 0.25:
+        return 2.0
+    if ratio <= 0.6:
+        return 3.0
+    if ratio <= 0.85:
+        return 4.0
+    return 5.0
+
+
 def _compute_aggregate(rows: list) -> dict:
     """Compute dimension and domain averages from the latest per-user rows."""
     dim_stats: dict = {}
@@ -568,6 +612,8 @@ def _compute_aggregate(rows: list) -> dict:
         if isinstance(payload, str):
             payload = json.loads(payload)
 
+        application_domains = payload.get("applicationDomains", [])
+        total_capabilities = len(payload.get("dimensions", []))
         for dim in payload.get("dimensions", []):
             did = dim.get("id")
             if did is None:
@@ -582,10 +628,12 @@ def _compute_aggregate(rows: list) -> dict:
                     "count": 0,
                 },
             )
-            entry["sum"] += float(dim.get("score", 0.0))
+            # Derive dimension score from matrix reach; the stored score is
+            # ignored because the edit panel no longer lets users set it.
+            entry["sum"] += _derived_dimension_score(did, application_domains)
             entry["count"] += 1
 
-        for domain in payload.get("applicationDomains", []):
+        for domain in application_domains:
             did = domain.get("id")
             if did is None:
                 continue
@@ -605,8 +653,9 @@ def _compute_aggregate(rows: list) -> dict:
                     "capability_ids": set(),
                 },
             )
+            normalized_involvement = _normalized_involvement(domain, total_capabilities)
             entry["involvement_sum"] += _INVOLVEMENT_MAP.get(
-                domain.get("involvement", "none"), 0
+                normalized_involvement, 0
             )
             entry["value_sum"] += _SIGNAL_MAP.get(domain.get("value", "low"), 0)
             entry["confidence_sum"] += _SIGNAL_MAP.get(
@@ -619,7 +668,7 @@ def _compute_aggregate(rows: list) -> dict:
                 entry["not_applicable_count"] += 1
             else:
                 entry["in_scope_count"] += 1
-                if domain.get("involvement", "none") != "none":
+                if normalized_involvement != "none":
                     entry["active_count"] += 1
 
     dimensions = []
@@ -659,6 +708,13 @@ def _compute_aggregate(rows: list) -> dict:
             }
         )
 
+    logger.info(
+        "Aggregate for manager=%s rows=%d domains=%s",
+        rows[0][4] if rows else "none",
+        len(rows),
+        {d["shortName"]: d["capability_ids"] for d in domains},
+    )
+
     return {"member_count": len(rows), "dimensions": dimensions, "domains": domains}
 
 
@@ -674,6 +730,17 @@ def create_submission() -> Any:
     manager = _get_manager(identity["uid"])
     payload = _json_payload()
     _validate_dashboard_payload(payload)
+
+    link_counts = {
+        d.get("shortName", d.get("id")): len(d.get("capabilityIds", []) or [])
+        for d in payload.get("applicationDomains", [])
+    }
+    logger.info(
+        "Submission from %s manager=%s domains=%s",
+        identity["uid"],
+        manager["manager_uid"],
+        link_counts,
+    )
 
     conn = _get_db_conn()
     try:

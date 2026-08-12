@@ -60,8 +60,8 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(find.text('How to Read — Capability × Domain'), findsOneWidget);
-      expect(find.text('Capability × Domain Links'), findsOneWidget);
+      expect(find.text('How to Read — AI × SDLC Adoption Matrix'), findsOneWidget);
+      expect(find.text('AI × SDLC Adoption Matrix'), findsOneWidget);
       expect(find.text('How to Read — SDLC Coverage'), findsNothing);
       expect(find.text('SDLC Coverage'), findsNothing);
       expect(find.text('SDLC Application'), findsNothing);

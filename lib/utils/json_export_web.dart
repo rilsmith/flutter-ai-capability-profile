@@ -1,14 +1,17 @@
 import 'dart:convert';
+import 'dart:js_interop';
 
-// ignore: avoid_web_libraries_in_flutter, deprecated_member_use
-import 'dart:html' as html;
+import 'package:web/web.dart';
 
 void exportDashboardJson(String jsonString) {
   final bytes = utf8.encode(jsonString);
-  final blob = html.Blob([bytes], 'application/json');
-  final url = html.Url.createObjectUrlFromBlob(blob);
-  html.AnchorElement(href: url)
-    ..setAttribute('download', 'capability-profile.json')
-    ..click();
-  html.Url.revokeObjectUrl(url);
+  final blob = Blob([bytes.toJS].toJS, BlobPropertyBag(type: 'application/json'));
+  final url = URL.createObjectURL(blob);
+  final anchor = HTMLAnchorElement()
+    ..href = url
+    ..download = 'capability-profile.json';
+  document.body!.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }

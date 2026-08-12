@@ -19,6 +19,32 @@ ApplicationBreadth computeApplicationBreadth(List<ApplicationDomain> domains) {
   );
 }
 
+/// Derive a dimension score from how many in-scope domains link it.
+///
+/// Since the edit panel no longer lets users set dimension scores directly,
+/// the matrix (capability links) becomes the source of truth for dimension
+/// strength. This mirrors the backend aggregate derivation.
+double deriveDimensionScore(
+  int dimensionId,
+  List<ApplicationDomain> domains, {
+  double maxScore = 5.0,
+}) {
+  final inScope = domains
+      .where((d) => d.applicability == DomainApplicability.inScope)
+      .toList();
+  final total = inScope.length;
+  if (total == 0) return 1.0;
+  final linked = inScope
+      .where((d) => d.capabilityIds.contains(dimensionId))
+      .length;
+  final ratio = linked / total;
+  if (ratio == 0) return 1.0;
+  if (ratio <= 0.25) return 2.0;
+  if (ratio <= 0.6) return 3.0;
+  if (ratio <= 0.85) return 4.0;
+  return maxScore;
+}
+
 List<Dimension> _highCapabilityDimensions(
   List<Dimension> dimensions,
   TierGroup tiers,

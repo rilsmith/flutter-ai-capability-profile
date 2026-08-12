@@ -20,7 +20,7 @@ spec:
       containers:
         - name: web
           image: docker-ads-release.dr-uw2.adobeitc.com/ai-capability-dashboard-web:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 80
               name: http

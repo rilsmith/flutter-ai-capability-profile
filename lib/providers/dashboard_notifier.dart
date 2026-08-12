@@ -10,6 +10,7 @@ import '../data/defaults.dart';
 import '../models/application_domain.dart';
 import '../models/dashboard_data.dart';
 import '../utils/api_origin.dart';
+import '../utils/application.dart';
 import '../utils/application_sync.dart';
 import '../models/dimension.dart';
 import '../utils/json_export_web.dart'
@@ -89,19 +90,65 @@ class DashboardNotifier extends ChangeNotifier {
   }
 
   DashboardData _mergeParsed(DashboardData parsed) {
+    final migratedDomains = migrateApplicationDomains(
+      parsed.applicationDomains.isNotEmpty
+          ? parsed.applicationDomains
+          : null,
+      defaultDashboardData.applicationDomains,
+    );
+    // The edit panel no longer lets users mark domains as not applicable, so
+    // reset any saved not-applicable domains back to in scope. Also keep
+    // involvement consistent with capability links so the SDLC coverage strip
+    // and team aggregate reflect matrix changes.
+    final totalCapabilities = parsed.dimensions.isNotEmpty
+        ? parsed.dimensions.length
+        : defaultDashboardData.dimensions.length;
+    final normalizedDomains = migratedDomains.map((domain) {
+      final applicability = domain.isNotApplicable
+          ? DomainApplicability.inScope
+          : domain.applicability;
+      final involvement = involvementForCapabilityLinks(
+        domain.capabilityIds,
+        domain.involvement,
+        totalCapabilities,
+      );
+      if (applicability == domain.applicability &&
+          involvement == domain.involvement) {
+        return domain;
+      }
+      return domain.copyWith(
+        applicability: applicability,
+        involvement: involvement,
+      );
+    }).toList();
+
+    // Derive dimension scores from capability link reach so the local dashboard
+    // stays consistent with the backend aggregate and the radar chart reflects
+    // the matrix. Since the edit panel was removed, name/color/descriptor
+    // should always come from the app defaults rather than saved submissions.
+    final defaultDimById = {
+      for (final dim in defaultDashboardData.dimensions) dim.id: dim,
+    };
+    final derivedDimensions = parsed.dimensions.isNotEmpty
+        ? parsed.dimensions.map((dim) {
+            final defaultDim = defaultDimById[dim.id];
+            final score = deriveDimensionScore(dim.id, normalizedDomains,
+                maxScore: parsed.maxScore.toDouble());
+            return dim.copyWith(
+              name: defaultDim?.name ?? dim.name,
+              color: defaultDim?.color ?? dim.color,
+              descriptor: defaultDim?.descriptor ?? dim.descriptor,
+              score: score,
+            );
+          }).toList()
+        : defaultDashboardData.dimensions;
+
+    // The edit panel was removed, so the header title and subtitle should
+    // always come from the app defaults rather than any saved submission.
     return defaultDashboardData.copyWith(
-      title: parsed.title,
-      subtitle: parsed.subtitle,
       intro: parsed.intro.isNotEmpty ? parsed.intro : defaultDashboardData.intro,
-      dimensions: parsed.dimensions.isNotEmpty
-          ? parsed.dimensions
-          : defaultDashboardData.dimensions,
-      applicationDomains: migrateApplicationDomains(
-        parsed.applicationDomains.isNotEmpty
-            ? parsed.applicationDomains
-            : null,
-        defaultDashboardData.applicationDomains,
-      ),
+      dimensions: derivedDimensions,
+      applicationDomains: normalizedDomains,
       maturityScale: parsed.maturityScale.isNotEmpty
           ? parsed.maturityScale
           : defaultDashboardData.maturityScale,
@@ -277,13 +324,33 @@ class DashboardNotifier extends ChangeNotifier {
   }
 
   void toggleDomainCapability(int domainId, int capabilityId) {
+    final newDomains = _data.applicationDomains.map((domain) {
+      if (domain.id != domainId || domain.isNotApplicable) return domain;
+      final newCapabilityIds = toggleCapabilityIds(domain, capabilityId);
+      return domain.copyWith(
+        capabilityIds: newCapabilityIds,
+        involvement: involvementForCapabilityLinks(
+          newCapabilityIds,
+          domain.involvement,
+          _data.dimensions.length,
+        ),
+      );
+    }).toList();
+
+    // Derive dimension scores from the updated capability links so the radar
+    // chart reflects matrix changes immediately.
+    final newDimensions = _data.dimensions.map((dim) {
+      final score = deriveDimensionScore(
+        dim.id,
+        newDomains,
+        maxScore: _data.maxScore.toDouble(),
+      );
+      return dim.copyWith(score: score);
+    }).toList();
+
     _data = _data.copyWith(
-      applicationDomains: _data.applicationDomains.map((domain) {
-        if (domain.id != domainId || domain.isNotApplicable) return domain;
-        return domain.copyWith(
-          capabilityIds: toggleCapabilityIds(domain, capabilityId),
-        );
-      }).toList(),
+      applicationDomains: newDomains,
+      dimensions: newDimensions,
     );
     _submitSuccess = null;
     _submitError = null;

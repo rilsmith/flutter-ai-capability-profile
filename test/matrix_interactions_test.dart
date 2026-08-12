@@ -152,6 +152,96 @@ void main() {
       );
     });
 
+    testWidgets('linking a capability promotes involvement from never to occasional',
+        (tester) async {
+      final dashboardNotifier = DashboardNotifier.forTesting();
+      final firstDimension = dashboardNotifier.data.dimensions.first;
+      final firstDomain = dashboardNotifier.data.applicationDomains.first;
+
+      expect(firstDomain.involvement, DomainInvolvement.occasional);
+
+      // Manually set involvement to none to simulate stale/legacy data.
+      dashboardNotifier.patchApplicationDomain(
+        firstDomain.id,
+        involvement: DomainInvolvement.none,
+      );
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(
+        dashboardNotifier.data.applicationDomains.first.involvement,
+        DomainInvolvement.none,
+      );
+
+      dashboardNotifier.toggleDomainCapability(firstDomain.id, firstDimension.id);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      final updatedDomain = dashboardNotifier.data.applicationDomains.first;
+      expect(updatedDomain.capabilityIds, contains(firstDimension.id));
+      expect(updatedDomain.involvement, DomainInvolvement.occasional);
+    });
+
+    testWidgets('unlinking the last capability resets involvement to never',
+        (tester) async {
+      final dashboardNotifier = DashboardNotifier.forTesting();
+      final firstDimension = dashboardNotifier.data.dimensions.first;
+      final firstDomain = dashboardNotifier.data.applicationDomains.first;
+
+      dashboardNotifier.toggleDomainCapability(firstDomain.id, firstDimension.id);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(
+        dashboardNotifier.data.applicationDomains.first.involvement,
+        DomainInvolvement.occasional,
+      );
+
+      dashboardNotifier.toggleDomainCapability(firstDomain.id, firstDimension.id);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      final updatedDomain = dashboardNotifier.data.applicationDomains.first;
+      expect(updatedDomain.capabilityIds, isEmpty);
+      expect(updatedDomain.involvement, DomainInvolvement.none);
+    });
+
+    testWidgets('linking some capabilities keeps involvement as occasional',
+        (tester) async {
+      final dashboardNotifier = DashboardNotifier.forTesting();
+      final firstDimension = dashboardNotifier.data.dimensions.first;
+      final secondDimension = dashboardNotifier.data.dimensions[1];
+      final firstDomain = dashboardNotifier.data.applicationDomains.first;
+
+      dashboardNotifier.toggleDomainCapability(firstDomain.id, firstDimension.id);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 400));
+      dashboardNotifier.toggleDomainCapability(firstDomain.id, secondDimension.id);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      final updatedDomain = dashboardNotifier.data.applicationDomains.first;
+      expect(updatedDomain.capabilityIds, containsAll([firstDimension.id, secondDimension.id]));
+      expect(updatedDomain.involvement, DomainInvolvement.occasional);
+    });
+
+    testWidgets('linking all capabilities promotes involvement to regular',
+        (tester) async {
+      final dashboardNotifier = DashboardNotifier.forTesting();
+      final firstDomain = dashboardNotifier.data.applicationDomains.first;
+
+      for (final dim in dashboardNotifier.data.dimensions) {
+        dashboardNotifier.toggleDomainCapability(firstDomain.id, dim.id);
+        await tester.pumpAndSettle();
+        await tester.pump(const Duration(milliseconds: 400));
+      }
+
+      final updatedDomain = dashboardNotifier.data.applicationDomains.first;
+      expect(
+        updatedDomain.capabilityIds.length,
+        dashboardNotifier.data.dimensions.length,
+      );
+      expect(updatedDomain.involvement, DomainInvolvement.regular);
+    });
+
     testWidgets('N/A domain cells are not interactive', (tester) async {
       const dimension = Dimension(
         id: 1,
@@ -248,7 +338,6 @@ void main() {
         find.text('Intent specification and iterative refinement'),
         findsOneWidget,
       );
-      expect(find.text('Score: 3.5 / 5'), findsOneWidget);
 
       await tester.tap(find.text('Close'));
       await tester.pumpAndSettle();
@@ -284,8 +373,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final explanationFinder = find.text('How to Read — Capability × Domain');
-      final matrixFinder = find.text('Capability × Domain Links');
+      final explanationFinder = find.text('How to Read — AI × SDLC Adoption Matrix');
+      final matrixFinder = find.text('AI × SDLC Adoption Matrix');
       expect(explanationFinder, findsOneWidget);
       expect(matrixFinder, findsOneWidget);
 

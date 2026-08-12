@@ -5,9 +5,8 @@ import '../theme/dashboard_theme.dart';
 
 void showCapabilityDefinitionDialog(
   BuildContext context,
-  Dimension dimension, {
-  required int maxScore,
-}) {
+  Dimension dimension,
+) {
   final color = DashboardTheme.parseHex(dimension.color);
 
   showDialog<void>(
@@ -33,15 +32,6 @@ void showCapabilityDefinitionDialog(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Score: ${dimension.score.toStringAsFixed(1)} / $maxScore',
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: DashboardTheme.body,
-            ),
-          ),
-          const SizedBox(height: 12),
           const Text(
             'Definition',
             style: TextStyle(
