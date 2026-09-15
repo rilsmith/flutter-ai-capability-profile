@@ -12,6 +12,7 @@ import '../theme/dashboard_theme.dart';
 import 'application_coverage_card.dart';
 import 'how_to_read_card.dart';
 import 'interactive_radar_chart.dart';
+import 'team_capability_heatmap.dart';
 
 class TeamRadarTab extends StatefulWidget {
   const TeamRadarTab({super.key});
@@ -52,7 +53,14 @@ class _TeamRadarTabState extends State<TeamRadarTab>
     final dashNotifier = context.watch<DashboardNotifier>();
     final teamNotifier = context.watch<TeamNotifier>();
     final data = dashNotifier.data;
-    final profile = teamNotifier.profile;
+    final isOrg = teamNotifier.orgScope == TeamScope.org;
+    final profile = isOrg ? teamNotifier.orgProfile : teamNotifier.profile;
+    final aggregateCoverageDomains = isOrg
+        ? teamNotifier.orgAggregateCoverageDomains
+        : teamNotifier.aggregateCoverageDomains;
+    final linkCounts = isOrg ? teamNotifier.orgLinkCounts : teamNotifier.linkCounts;
+    final loading = isOrg ? teamNotifier.orgLoading : teamNotifier.loading;
+    final error = isOrg ? teamNotifier.orgError : teamNotifier.error;
     final width = MediaQuery.sizeOf(context).width;
     final sideBySide = width > 1000;
 
@@ -93,6 +101,14 @@ class _TeamRadarTabState extends State<TeamRadarTab>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (teamNotifier.isManager) ...[
+            _buildScopeToggle(context, teamNotifier),
+            const SizedBox(height: 16),
+          ],
+          if (isOrg) ...[
+            _buildIncludeSelfToggle(context, teamNotifier),
+            const SizedBox(height: 16),
+          ],
           const HowToReadCard(
             title: 'How to Read — SDLC Coverage',
             text:
@@ -102,37 +118,109 @@ class _TeamRadarTabState extends State<TeamRadarTab>
           ),
           const SizedBox(height: 20),
           ApplicationCoverageCard(
-            domains: teamNotifier.aggregateCoverageDomains,
+            domains: aggregateCoverageDomains,
             onCycleInvolvement: null,
             onSelectDomain: null,
           ),
+          if (profile.members.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            TeamCapabilityHeatmap(
+              dimensions: dimensions,
+              domains: aggregateCoverageDomains,
+              linkCounts: linkCounts,
+              memberCount: profile.members.length,
+            ),
+          ],
           const SizedBox(height: 20),
-          _buildHeader(context, profile),
+          _buildHeader(context, profile, isOrg: isOrg),
           const SizedBox(height: 20),
           if (teamNotifier.warnings.isNotEmpty) _buildWarnings(context, teamNotifier),
           if (teamNotifier.warnings.isNotEmpty) const SizedBox(height: 16),
-          if (teamNotifier.loading)
+          if (loading)
             const Center(child: CircularProgressIndicator())
-          else if (teamNotifier.error != null)
-            _buildErrorState(context, teamNotifier)
+          else if (error != null)
+            _buildErrorState(context, teamNotifier, isOrg: isOrg)
           else if (profile.members.isEmpty)
-            _buildEmptyState(context)
+            _buildEmptyState(context, isOrg: isOrg)
           else
             _buildRadarSection(chart, sideBySide, width),
           if (profile.members.isNotEmpty) ...[
             const SizedBox(height: 20),
-            _buildMemberList(context, profile),
+            _buildMemberList(context, profile, isOrg: isOrg),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildHeader(BuildContext context, TeamProfile profile) {
+  Widget _buildScopeToggle(BuildContext context, TeamNotifier teamNotifier) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: DashboardTheme.cardDecoration(),
+      child: Row(
+        children: [
+          Expanded(
+            child: _ScopeButton(
+              label: 'My Team',
+              selected: teamNotifier.orgScope == TeamScope.team,
+              onTap: () {
+                setState(() => _selectedMemberIndex = null);
+                teamNotifier.setOrgScope(TeamScope.team);
+              },
+            ),
+          ),
+          Expanded(
+            child: _ScopeButton(
+              label: 'My Org',
+              selected: teamNotifier.orgScope == TeamScope.org,
+              onTap: () {
+                setState(() => _selectedMemberIndex = null);
+                teamNotifier.setOrgScope(TeamScope.org);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIncludeSelfToggle(BuildContext context, TeamNotifier teamNotifier) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: DashboardTheme.cardDecoration(),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Include my own submission',
+              style: TextStyle(
+                fontSize: 14,
+                color: DashboardTheme.body,
+              ),
+            ),
+          ),
+          Switch(
+            value: teamNotifier.orgIncludeSelf,
+            onChanged: (value) {
+              setState(() => _selectedMemberIndex = null);
+              teamNotifier.setOrgIncludeSelf(value);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(
+    BuildContext context,
+    TeamProfile profile, {
+    required bool isOrg,
+  }) {
     final selectedName = _selectedMemberIndex != null &&
             _selectedMemberIndex! < profile.members.length
         ? profile.members[_selectedMemberIndex!].name
         : null;
+    final scopeLabel = isOrg ? 'Org' : 'Team';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -141,8 +229,8 @@ class _TeamRadarTabState extends State<TeamRadarTab>
           selectedName != null
               ? '$selectedName — Individual View'
               : profile.members.isEmpty
-                  ? 'Team Radar'
-                  : 'Team Radar — ${profile.members.length} ${profile.members.length == 1 ? 'member' : 'members'}',
+                  ? '$scopeLabel Radar'
+                  : '$scopeLabel Radar — ${profile.members.length} ${profile.members.length == 1 ? 'member' : 'members'}',
           style: const TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w700,
@@ -152,8 +240,8 @@ class _TeamRadarTabState extends State<TeamRadarTab>
         const SizedBox(height: 4),
         Text(
           selectedName != null
-              ? 'Showing $selectedName\'s scores. Click other member names to compare, or click again to return to team average.'
-              : 'The polygon shows the team average. Click a member name to view their individual scores. The shaded band shows the min-max range; colored dots show each member on every axis.',
+              ? 'Showing $selectedName\'s scores. Click other member names to compare, or click again to return to $scopeLabel average.'
+              : 'The polygon shows the $scopeLabel average. Click a member name to view their individual scores. The shaded band shows the min-max range; colored dots show each member on every axis.',
           style: const TextStyle(fontSize: 13, color: DashboardTheme.muted),
         ),
         if (profile.members.length > 1 && selectedName == null)
@@ -194,7 +282,11 @@ class _TeamRadarTabState extends State<TeamRadarTab>
     );
   }
 
-  Widget _buildEmptyState(BuildContext context) {
+  Widget _buildEmptyState(BuildContext context, {required bool isOrg}) {
+    final title = isOrg ? 'No org submissions yet' : 'No team submissions yet';
+    final body = isOrg
+        ? 'Org submissions from the SDLC Matrix tab will appear here once people in your reporting tree submit their matrices.'
+        : 'Team submissions from the SDLC Matrix tab will appear here once you and your teammates submit your matrices.';
     return Container(
       padding: const EdgeInsets.all(32),
       decoration: DashboardTheme.cardDecoration(),
@@ -203,7 +295,7 @@ class _TeamRadarTabState extends State<TeamRadarTab>
           const Icon(Icons.group_outlined, size: 48, color: DashboardTheme.subtle),
           const SizedBox(height: 16),
           Text(
-            'No team submissions yet',
+            title,
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 15,
@@ -212,10 +304,10 @@ class _TeamRadarTabState extends State<TeamRadarTab>
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Team submissions from the SDLC Matrix tab will appear here once you and your teammates submit your matrices.',
+          Text(
+            body,
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, color: DashboardTheme.muted),
+            style: const TextStyle(fontSize: 13, color: DashboardTheme.muted),
           ),
         ],
       ),
@@ -268,8 +360,13 @@ class _TeamRadarTabState extends State<TeamRadarTab>
     );
   }
 
-  Widget _buildErrorState(BuildContext context, TeamNotifier teamNotifier) {
+  Widget _buildErrorState(
+    BuildContext context,
+    TeamNotifier teamNotifier, {
+    required bool isOrg,
+  }) {
     final auth = context.read<AuthNotifier>();
+    final error = isOrg ? teamNotifier.orgError! : teamNotifier.error!;
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: DashboardTheme.cardDecoration(),
@@ -278,7 +375,7 @@ class _TeamRadarTabState extends State<TeamRadarTab>
           const Icon(Icons.error_outline, size: 40, color: Colors.red),
           const SizedBox(height: 12),
           Text(
-            'Unable to load team data',
+            isOrg ? 'Unable to load org data' : 'Unable to load team data',
             style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
@@ -287,7 +384,7 @@ class _TeamRadarTabState extends State<TeamRadarTab>
           ),
           const SizedBox(height: 8),
           Text(
-            teamNotifier.error!,
+            error,
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 13, color: DashboardTheme.muted),
           ),
@@ -296,7 +393,11 @@ class _TeamRadarTabState extends State<TeamRadarTab>
             onPressed: () {
               final token = auth.token;
               if (token != null) {
-                teamNotifier.fetchTeamData(token, force: true);
+                if (isOrg) {
+                  teamNotifier.fetchOrgData(token, force: true);
+                } else {
+                  teamNotifier.fetchTeamData(token, force: true);
+                }
               }
             },
             icon: const Icon(Icons.refresh, size: 18),
@@ -338,7 +439,11 @@ class _TeamRadarTabState extends State<TeamRadarTab>
     );
   }
 
-  Widget _buildMemberList(BuildContext context, TeamProfile profile) {
+  Widget _buildMemberList(
+    BuildContext context,
+    TeamProfile profile, {
+    required bool isOrg,
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
       decoration: DashboardTheme.cardDecoration(),
@@ -348,9 +453,9 @@ class _TeamRadarTabState extends State<TeamRadarTab>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Team Members',
-                style: TextStyle(
+              Text(
+                isOrg ? 'Org Members' : 'Team Members',
+                style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
                   color: DashboardTheme.heading,
@@ -359,9 +464,9 @@ class _TeamRadarTabState extends State<TeamRadarTab>
               if (_selectedMemberIndex != null)
                 TextButton(
                   onPressed: () => setState(() => _selectedMemberIndex = null),
-                  child: const Text(
-                    'Show team average',
-                    style: TextStyle(fontSize: 12),
+                  child: Text(
+                    isOrg ? 'Show org average' : 'Show team average',
+                    style: const TextStyle(fontSize: 12),
                   ),
                 ),
             ],
@@ -447,6 +552,42 @@ class _TeamRadarTabState extends State<TeamRadarTab>
             );
           }),
         ],
+      ),
+    );
+  }
+}
+
+class _ScopeButton extends StatelessWidget {
+  const _ScopeButton({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: selected ? DashboardTheme.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: selected ? Colors.white : DashboardTheme.body,
+          ),
+        ),
       ),
     );
   }

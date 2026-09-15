@@ -40,7 +40,6 @@ class CapabilityApplicationMatrix extends StatelessWidget {
 
   static const _capabilityWidth = 180.0;
   static const _cellWidthMin = 34.0;
-  static const _reachWidth = 44.0;
   static const _wideBreakpoint = 768.0;
   static const _horizontalHeaderBreakpoint = 900.0;
 
@@ -65,8 +64,7 @@ class CapabilityApplicationMatrix extends StatelessWidget {
               final horizontalHeaders =
                   constraints.maxWidth >= _horizontalHeaderBreakpoint;
               final headerHeight = horizontalHeaders ? 44.0 : 96.0;
-              final gridWidth =
-                  constraints.maxWidth - _capabilityWidth - _reachWidth;
+              final gridWidth = constraints.maxWidth - _capabilityWidth;
               final cellWidth = isWide
                   ? (gridWidth / domains.length)
                       .clamp(_cellWidthMin, double.infinity)
@@ -115,13 +113,6 @@ class CapabilityApplicationMatrix extends StatelessWidget {
                     Expanded(child: domainGrid)
                   else
                     domainGrid,
-                  _ReachColumn(
-                    width: _reachWidth,
-                    headerHeight: headerHeight,
-                    dimensions: dimensions,
-                    domains: domains,
-                    selectedDimensionId: selectedDimensionId,
-                  ),
                 ],
               );
 
@@ -519,65 +510,6 @@ class _MatrixDataRow extends StatelessWidget {
             ),
           );
         }).toList(),
-      ),
-    );
-  }
-}
-
-class _ReachColumn extends StatelessWidget {
-  const _ReachColumn({
-    required this.width,
-    required this.headerHeight,
-    required this.dimensions,
-    required this.domains,
-    required this.selectedDimensionId,
-  });
-
-  final double width;
-  final double headerHeight;
-  final List<Dimension> dimensions;
-  final List<ApplicationDomain> domains;
-  final int? selectedDimensionId;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: width,
-      child: Column(
-        children: [
-          SizedBox(
-            height: headerHeight,
-            child: const Center(
-              child: Text(
-                'Reach',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: DashboardTheme.muted,
-                ),
-              ),
-            ),
-          ),
-          ...dimensions.map((dimension) {
-            final selected = selectedDimensionId == dimension.id;
-            final reach = linkedDomainCount(dimension.id, domains);
-            return SizedBox(
-              height: 40,
-              child: Center(
-                child: Text(
-                  '$reach',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: selected
-                        ? DashboardTheme.primary
-                        : DashboardTheme.muted,
-                  ),
-                ),
-              ),
-            );
-          }),
-        ],
       ),
     );
   }

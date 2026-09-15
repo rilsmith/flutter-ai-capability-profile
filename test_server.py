@@ -187,6 +187,42 @@ def test_ldap_returns_500_when_ldap_unreachable(client):
     assert "error" in resp.json
 
 
+class _FakeLdapConn:
+    """Minimal ldap3 Connection stand-in returning one canned entry."""
+
+    def __init__(self, server, auto_bind=True, **kwargs):
+        self.bind_kwargs = kwargs
+        self.entries = []
+
+    def search(self, *_args, **_kwargs):
+        return True
+
+    def unbind(self):
+        return True
+
+
+def test_ldap_lookup_binds_with_service_account_when_configured(monkeypatch):
+    monkeypatch.setattr(server_module, "LDAP_BIND_DN", "cn=svc-ldap-ro,ou=users,o=adbe")
+    monkeypatch.setattr(server_module, "LDAP_PASSWORD", "secret")
+    fake = _FakeLdapConn(server=mock.Mock(), auto_bind=True)
+    with mock.patch.object(server_module, "Server", return_value=mock.Mock()), \
+            mock.patch.object(server_module, "Connection", return_value=fake) as conn_ctor:
+        server_module._ldap_lookup("rilsmith")
+    assert conn_ctor.call_args.kwargs["user"] == "cn=svc-ldap-ro,ou=users,o=adbe"
+    assert conn_ctor.call_args.kwargs["password"] == "secret"
+    assert "authentication" not in conn_ctor.call_args.kwargs
+
+
+def test_ldap_lookup_falls_back_to_anonymous_without_credentials(monkeypatch):
+    monkeypatch.setattr(server_module, "LDAP_BIND_DN", None)
+    monkeypatch.setattr(server_module, "LDAP_PASSWORD", None)
+    fake = _FakeLdapConn(server=mock.Mock(), auto_bind=True)
+    with mock.patch.object(server_module, "Server", return_value=mock.Mock()), \
+            mock.patch.object(server_module, "Connection", return_value=fake) as conn_ctor:
+        server_module._ldap_lookup("rilsmith")
+    assert conn_ctor.call_args.kwargs["authentication"] == server_module.ANONYMOUS
+
+
 # ── CORS / general API behavior ──────────────────────────────────────────────
 
 
@@ -1057,6 +1093,225 @@ def test_get_submissions_team_aggregate_normalizes_involvement_from_capability_l
     domains = {d["id"]: d for d in resp.json["domains"]}
     assert domains[1]["involvement_average"] == 1.0
     assert domains[1]["active_count"] == 1
+
+
+# ── Org tree / aggregate ─────────────────────────────────────────────────────
+
+
+def test_escape_ldap_filter_value_escapes_rfc4515_special_chars():
+    assert server_module._escape_ldap_filter_value("user*name") == "user\\2aname"
+    assert server_module._escape_ldap_filter_value("user(name") == "user\\28name"
+    assert server_module._escape_ldap_filter_value("user)name") == "user\\29name"
+    assert server_module._escape_ldap_filter_value("user\\name") == "user\\5cname"
+    assert server_module._escape_ldap_filter_value("user\x00name") == "user\\00name"
+    assert server_module._escape_ldap_filter_value("plain") == "plain"
+
+
+def test_get_submissions_org_requires_auth(client):
+    resp = client.get("/api/submissions/org")
+    assert resp.status_code == 401
+    resp = client.get("/api/submissions/org/aggregate")
+    assert resp.status_code == 401
+
+
+def test_get_submissions_org_aggregate_returns_2_level_tree(
+    client, monkeypatch, db_conn
+):
+    """jbellows sees rilsmith and ckelley (and burton under rilsmith)."""
+    _set_auth(monkeypatch, uid="jbellows")
+
+    def _org_tree(_root_uid, _max_depth=None):
+        return {"rilsmith", "ckelley"}
+
+    monkeypatch.setattr(server_module, "_get_org_tree_uids", _org_tree)
+
+    _insert_submission(
+        db_conn,
+        "rilsmith",
+        "jbellows",
+        _sample_payload(
+            dimensions=[
+                {"id": 1, "name": "D1", "score": 2.0, "color": "#000", "descriptor": "D1"},
+                {"id": 2, "name": "D2", "score": 4.0, "color": "#fff", "descriptor": "D2"},
+            ],
+            applicationDomains=[
+                {
+                    "id": 1,
+                    "name": "Domain A",
+                    "shortName": "A",
+                    "applicability": "in_scope",
+                    "involvement": "regular",
+                    "value": "high",
+                    "confidence": "high",
+                    "capabilityIds": [1],
+                },
+            ],
+        ),
+        "2024-01-01T00:00:00+00:00",
+    )
+    _insert_submission(
+        db_conn,
+        "ckelley",
+        "jbellows",
+        _sample_payload(
+            dimensions=[
+                {"id": 1, "name": "D1", "score": 4.0, "color": "#000", "descriptor": "D1"},
+                {"id": 2, "name": "D2", "score": 6.0, "color": "#fff", "descriptor": "D2"},
+            ],
+            applicationDomains=[
+                {
+                    "id": 1,
+                    "name": "Domain A",
+                    "shortName": "A",
+                    "applicability": "in_scope",
+                    "involvement": "occasional",
+                    "value": "moderate",
+                    "confidence": "low",
+                    "capabilityIds": [2, 3],
+                },
+            ],
+        ),
+        "2024-01-01T00:00:00+00:00",
+    )
+
+    resp = client.get(
+        "/api/submissions/org/aggregate",
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 200
+    data = resp.json
+    assert data["member_count"] == 2
+    dims = {d["id"]: d for d in data["dimensions"]}
+    assert dims[1]["average"] == 3.0
+    assert dims[2]["average"] == 3.0
+    domains = {d["id"]: d for d in data["domains"]}
+    assert domains[1]["involvement_average"] == 1.5
+    assert domains[1]["value_average"] == 1.5
+    assert domains[1]["confidence_average"] == 1.0
+    assert domains[1]["capability_ids"] == [1, 2, 3]
+
+
+def test_get_submissions_org_aggregate_excludes_self_when_include_self_false(
+    client, monkeypatch, db_conn
+):
+    _set_auth(monkeypatch, uid="jbellows")
+
+    def _org_tree(_root_uid, _max_depth=None):
+        return {"rilsmith"}
+
+    monkeypatch.setattr(server_module, "_get_org_tree_uids", _org_tree)
+
+    _insert_submission(
+        db_conn,
+        "jbellows",
+        "someone",
+        _sample_payload(
+            applicationDomains=[
+                {
+                    "id": 1,
+                    "name": "Domain A",
+                    "shortName": "A",
+                    "applicability": "in_scope",
+                    "involvement": "regular",
+                    "value": "high",
+                    "confidence": "high",
+                    "capabilityIds": [1, 2, 3, 4, 5],
+                },
+            ]
+        ),
+        "2024-01-01T00:00:00+00:00",
+    )
+    _insert_submission(
+        db_conn,
+        "rilsmith",
+        "jbellows",
+        _sample_payload(
+            applicationDomains=[
+                {
+                    "id": 1,
+                    "name": "Domain A",
+                    "shortName": "A",
+                    "applicability": "in_scope",
+                    "involvement": "none",
+                    "value": "low",
+                    "confidence": "low",
+                    "capabilityIds": [],
+                },
+            ]
+        ),
+        "2024-01-01T00:00:00+00:00",
+    )
+
+    resp_with_self = client.get(
+        "/api/submissions/org/aggregate?include_self=true",
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp_with_self.status_code == 200
+    data_with_self = resp_with_self.json
+    # member_count reflects reports only, but self is included in the aggregate.
+    assert data_with_self["member_count"] == 1
+    domains_with_self = {d["id"]: d for d in data_with_self["domains"]}
+    assert domains_with_self[1]["involvement_average"] == 1.0
+    assert domains_with_self[1]["active_count"] == 1
+
+    resp_without_self = client.get(
+        "/api/submissions/org/aggregate?include_self=false",
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp_without_self.status_code == 200
+    data_without_self = resp_without_self.json
+    assert data_without_self["member_count"] == 1
+    domains_without_self = {d["id"]: d for d in data_without_self["domains"]}
+    assert domains_without_self[1]["involvement_average"] == 0.0
+    assert domains_without_self[1]["active_count"] == 0
+
+
+def test_get_submissions_org_returns_submission_list(
+    client, monkeypatch, db_conn
+):
+    _set_auth(monkeypatch, uid="jbellows")
+
+    def _org_tree(_root_uid, _max_depth=None):
+        return {"rilsmith"}
+
+    monkeypatch.setattr(server_module, "_get_org_tree_uids", _org_tree)
+
+    _insert_submission(
+        db_conn,
+        "rilsmith",
+        "jbellows",
+        _sample_payload(),
+        "2024-01-01T00:00:00+00:00",
+    )
+
+    resp = client.get(
+        "/api/submissions/org",
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 200
+    submissions = resp.json["submissions"]
+    assert len(submissions) == 1
+    assert submissions[0]["user_uid"] == "rilsmith"
+
+
+def test_get_submissions_org_aggregate_returns_empty_when_no_reports(
+    client, monkeypatch
+):
+    _set_auth(monkeypatch, uid="rilsmith")
+
+    def _org_tree(_root_uid, _max_depth=None):
+        return set()
+
+    monkeypatch.setattr(server_module, "_get_org_tree_uids", _org_tree)
+
+    resp = client.get(
+        "/api/submissions/org/aggregate",
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 200
+    assert resp.json["member_count"] == 0
+    assert resp.json["dimensions"] == []
+    assert resp.json["domains"] == []
 
 
 # ── Static files (local development) ─────────────────────────────────────────

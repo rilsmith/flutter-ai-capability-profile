@@ -45,6 +45,12 @@ GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET")
 REDIRECT_URI = os.environ.get("REDIRECT_URI")
 LDAP_URL = os.environ.get("LDAP_URL")
 LDAP_BASE_DN = os.environ.get("LDAP_BASE_DN")
+# Optional bind credentials. The directory's ACLs no longer expose the
+# "manager" attribute to anonymous readers, so an authenticated bind is
+# required for the team endpoints. When unset, lookups fall back to an
+# anonymous bind (local dev / tests).
+LDAP_BIND_DN = os.environ.get("LDAP_BIND_DN")
+LDAP_PASSWORD = os.environ.get("LDAP_PASSWORD")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 CORS_ORIGIN = os.environ.get("CORS_ORIGIN")
 WEB_DIR = os.environ.get("WEB_DIR", "build/web")
@@ -340,7 +346,15 @@ def auth_callback() -> Any:
 def _ldap_lookup(uid: str) -> dict:
     """Look up a user in the configured LDAP directory."""
     server = Server(LDAP_URL)
-    conn = Connection(server, authentication=ANONYMOUS, auto_bind=True)
+    # The directory hides the "manager" attribute from anonymous readers,
+    # so bind with the configured service account when credentials exist.
+    # Without credentials, fall back to an anonymous bind.
+    bind_kwargs = (
+        {"user": LDAP_BIND_DN, "password": LDAP_PASSWORD}
+        if LDAP_BIND_DN and LDAP_PASSWORD
+        else {"authentication": ANONYMOUS}
+    )
+    conn = Connection(server, auto_bind=True, **bind_kwargs)
     try:
         conn.search(
             LDAP_BASE_DN,
@@ -385,6 +399,75 @@ def ldap_api() -> Any:
     except Exception as exc:
         logger.exception("LDAP lookup failed")
         return jsonify({"error": str(exc)}), 500
+
+
+# ── Org tree helpers ─────────────────────────────────────────────────────────
+
+# Max recursion depth when walking the LDAP manager tree for "My Org".
+_ORG_TREE_MAX_DEPTH = 5
+
+
+def _escape_ldap_filter_value(value: str) -> str:
+    r"""Escape a value for use in an LDAP filter per RFC 4515.
+
+    Escapes *, (, ), \, NUL, and leading/trailing whitespace by converting
+    each special byte to its \XX hex form.
+    """
+    escaped = []
+    for char in value:
+        if char in {"\\", "*", "(", ")", "\x00"}:
+            escaped.append(f"\\{ord(char):02x}")
+        else:
+            escaped.append(char)
+    return "".join(escaped)
+
+
+def _get_direct_reports_uids(uid: str) -> list[str]:
+    """Return UIDs that list the given UID as their manager.
+
+    The manager attribute is stored as either the RDN `cn={uid}` or a DN
+    beginning with `cn={uid},...`. Search for both forms to find all direct
+    reports.
+    """
+    server = Server(LDAP_URL)
+    conn = Connection(server, authentication=ANONYMOUS, auto_bind=True)
+    try:
+        escaped_uid = _escape_ldap_filter_value(uid)
+        conn.search(
+            LDAP_BASE_DN,
+            f"(|(manager=cn={escaped_uid})(manager=cn={escaped_uid},*))",
+            search_scope=SUBTREE,
+            attributes=["uid"],
+        )
+        uids = []
+        for entry in conn.entries:
+            attrs = entry.entry_attributes_as_dict
+            entry_uid = attrs.get("uid")
+            if entry_uid:
+                uids.append(str(entry_uid[0]))
+        return uids
+    finally:
+        conn.unbind()
+
+
+def _get_org_tree_uids(root_uid: str, max_depth: int = _ORG_TREE_MAX_DEPTH) -> set[str]:
+    """Return all UIDs under root_uid in the LDAP manager tree (excluding root)."""
+    visited: set[str] = set()
+    frontier = [root_uid]
+    depth = 0
+    while frontier and depth < max_depth:
+        next_frontier: list[str] = []
+        for manager_uid in frontier:
+            if manager_uid in visited:
+                continue
+            visited.add(manager_uid)
+            for report_uid in _get_direct_reports_uids(manager_uid):
+                if report_uid not in visited:
+                    next_frontier.append(report_uid)
+        frontier = next_frontier
+        depth += 1
+    visited.discard(root_uid)
+    return visited
 
 
 # ── Submission helpers ───────────────────────────────────────────────────────
@@ -552,6 +635,29 @@ def _latest_team_submissions(manager_uid: str) -> list:
                 ORDER BY user_uid, submitted_at DESC
                 """,
                 (manager_uid,),
+            )
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
+def _latest_submissions_for_uids(uid_list: list[str]) -> list:
+    """Return the latest submission per user for an arbitrary list of UIDs."""
+    if not uid_list:
+        return []
+    conn = _get_db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT ON (user_uid)
+                    id, user_uid, user_email, user_display_name,
+                    manager_uid, department_number, submitted_at, payload
+                FROM submissions
+                WHERE user_uid = ANY(%s)
+                ORDER BY user_uid, submitted_at DESC
+                """,
+                (uid_list,),
             )
             return cur.fetchall()
     finally:
@@ -826,6 +932,47 @@ def get_team_aggregate() -> Any:
     rows = _latest_team_submissions(manager["manager_uid"])
 
     return jsonify(_compute_aggregate(rows))
+
+
+@app.route("/api/submissions/org", methods=["GET", "OPTIONS"])
+def get_org_submissions() -> Any:
+    """Return the latest submission per user for the authenticated user's org."""
+    if request.method == "OPTIONS":
+        return "", 204
+
+    identity = _get_identity()
+    root_uid = identity["uid"]
+    include_self = request.args.get("include_self", "true").lower() == "true"
+
+    org_uids = _get_org_tree_uids(root_uid)
+    if include_self:
+        org_uids.add(root_uid)
+
+    rows = _latest_submissions_for_uids(list(org_uids))
+    return jsonify({"submissions": [_row_to_submission(row) for row in rows]})
+
+
+@app.route("/api/submissions/org/aggregate", methods=["GET", "OPTIONS"])
+def get_org_aggregate() -> Any:
+    """Return aggregated dimension and domain data for the user's org."""
+    if request.method == "OPTIONS":
+        return "", 204
+
+    identity = _get_identity()
+    root_uid = identity["uid"]
+    include_self = request.args.get("include_self", "true").lower() == "true"
+
+    org_uids = _get_org_tree_uids(root_uid)
+    if include_self:
+        org_uids.add(root_uid)
+
+    rows = _latest_submissions_for_uids(list(org_uids))
+    result = _compute_aggregate(rows)
+    # member_count drives the "My Org" toggle visibility; it should reflect
+    # the number of reports in the org tree, not whether self is included.
+    report_rows = [r for r in rows if r[1] != root_uid]
+    result["member_count"] = len(report_rows)
+    return jsonify(result)
 
 
 # ── Catch-all for unknown API paths ───────────────────────────────────────────

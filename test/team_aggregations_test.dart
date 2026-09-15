@@ -16,6 +16,7 @@ import 'package:ai_capability_dashboard/providers/dashboard_notifier.dart';
 import 'package:ai_capability_dashboard/providers/team_notifier.dart';
 import 'package:ai_capability_dashboard/widgets/app_shell.dart';
 import 'package:ai_capability_dashboard/widgets/interactive_radar_chart.dart';
+import 'package:ai_capability_dashboard/widgets/team_capability_heatmap.dart';
 import 'package:ai_capability_dashboard/widgets/team_radar_tab.dart';
 
 Map<String, dynamic> _validSubmission({
@@ -23,6 +24,7 @@ Map<String, dynamic> _validSubmission({
   String name = 'Teammate',
   String email = 'teammate@example.com',
   List<double>? scores,
+  Map<int, List<int>>? capabilityIdsByDomain,
 }) {
   final dimensions = defaultDashboardData.dimensions.map((d) {
     final score = scores != null && d.id - 1 < scores.length
@@ -32,7 +34,10 @@ Map<String, dynamic> _validSubmission({
   }).toList();
 
   final applicationDomains = defaultDashboardData.applicationDomains.map((d) {
-    return d.copyWith(involvement: DomainInvolvement.regular).toJson();
+    return d.copyWith(
+      involvement: DomainInvolvement.regular,
+      capabilityIds: capabilityIdsByDomain?[d.id] ?? d.capabilityIds,
+    ).toJson();
   }).toList();
 
   return {
@@ -218,6 +223,63 @@ void main() {
       expect(notifier.loading, isFalse);
     });
 
+    testWidgets('parses capability link counts from team submissions', (tester) async {
+      final teamBody = {
+        'submissions': [
+          _validSubmission(
+            uid: 'alice',
+            name: 'Alice',
+            capabilityIdsByDomain: {4: [1, 2]},
+          ),
+          _validSubmission(
+            uid: 'bob',
+            name: 'Bob',
+            capabilityIdsByDomain: {4: [1]},
+          ),
+        ],
+      };
+      final aggregateBody = _aggregateResponse(
+        memberCount: 2,
+        domains: defaultDashboardData.applicationDomains.map((d) => {
+          'id': d.id,
+          'name': d.name,
+          'shortName': d.shortName,
+          'involvement_average': 1.0,
+          'value_average': 0.0,
+          'confidence_average': 0.0,
+          'in_scope_count': 2,
+          'active_count': 2,
+          'not_applicable_count': 0,
+        }).toList(),
+      );
+
+      final mockClient = MockClient((request) async {
+        if (request.url.path == '/api/submissions/team') {
+          return http.Response(jsonEncode(teamBody), 200);
+        }
+        if (request.url.path == '/api/submissions/team/aggregate') {
+          return http.Response(jsonEncode(aggregateBody), 200);
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final notifier = TeamNotifier(httpClient: mockClient);
+      await notifier.fetchTeamData('test-token');
+      await tester.pumpAndSettle();
+
+      expect(notifier.error, isNull);
+      // Both Alice and Bob linked capability 1 to Implementation (domain 4).
+      expect(notifier.linkCounts.linkCount(4, 1), 2);
+      // Only Alice linked capability 2 to domain 4.
+      expect(notifier.linkCounts.linkCount(4, 2), 1);
+      // Both members marked domain 4 in scope.
+      expect(notifier.linkCounts.inScopeCount(4), 2);
+      // Capability 1: linked only in domain 4, by 2 members.
+      expect(notifier.linkCounts.totalLinksForCapability(1), 2);
+      expect(notifier.linkCounts.totalLinksForCapability(2), 1);
+      expect(notifier.linkCounts.totalLinksForCapability(3), 0);
+    });
+
     testWidgets('sets error when aggregate endpoint fails', (tester) async {
       final mockClient = MockClient((request) async {
         if (request.url.path == '/api/submissions/team') {
@@ -287,6 +349,68 @@ void main() {
       expect(find.widgetWithText(InkWell, 'Bob'), findsOneWidget);
       expect(find.byType(InteractiveRadarChart), findsOneWidget);
       expect(find.text('No team submissions yet'), findsNothing);
+    });
+
+    testWidgets('renders capability heatmap with aggregated counts', (tester) async {
+      final teamNotifier = TeamNotifier.forTesting(
+        profile: TeamProfile(
+          members: [
+            IndividualProfile(name: 'Alice', scores: [5, 4, 3, 2, 1]),
+            IndividualProfile(name: 'Bob', scores: [1, 2, 3, 4, 5]),
+          ],
+        ),
+        aggregateCoverageDomains: defaultDashboardData.applicationDomains
+            .map(
+              (d) => ApplicationDomain(
+                id: d.id,
+                name: d.name,
+                shortName: d.shortName,
+                applicability: DomainApplicability.inScope,
+                involvement: DomainInvolvement.regular,
+                value: DomainSignal.moderate,
+                confidence: DomainSignal.moderate,
+                capabilityIds: const [],
+              ),
+            )
+            .toList(),
+        aggregateMemberCount: 2,
+        linkCounts: const TeamLinkCounts(
+          capabilityCounts: {4: {1: 2, 2: 1}},
+          inScopeCounts: {4: 2},
+        ),
+      );
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => DashboardNotifier.forTesting()),
+            ChangeNotifierProvider.value(value: teamNotifier),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: TeamRadarTab()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('AI × SDLC Adoption Heatmap'), findsOneWidget);
+      // Counts live in the cell tooltips, not rendered in the cells.
+      expect(
+        find.descendant(
+          of: find.byType(TeamCapabilityHeatmap),
+          matching: find.byTooltip('2 of 2 members'),
+        ),
+        findsWidgets,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(TeamCapabilityHeatmap),
+          matching: find.byTooltip('1 of 2 members'),
+        ),
+        findsWidgets,
+      );
+      // The per-capability totals column was removed.
+      expect(find.text('Links'), findsNothing);
     });
 
     testWidgets('shows empty state when no team submissions exist', (tester) async {
@@ -523,6 +647,151 @@ void main() {
 
       // Selection should be preserved.
       expect(find.text('Alice — Individual View'), findsOneWidget);
+    });
+
+    testWidgets('shows scope toggle for managers', (tester) async {
+      final teamNotifier = TeamNotifier.forTesting(
+        profile: TeamProfile(
+          members: [IndividualProfile(name: 'Alice', scores: [3, 3, 3, 3, 3])],
+        ),
+        aggregateCoverageDomains: defaultDashboardData.applicationDomains
+            .map(
+              (d) => ApplicationDomain(
+                id: d.id,
+                name: d.name,
+                shortName: d.shortName,
+                applicability: DomainApplicability.inScope,
+                involvement: DomainInvolvement.regular,
+                value: DomainSignal.moderate,
+                confidence: DomainSignal.moderate,
+                capabilityIds: const [],
+              ),
+            )
+            .toList(),
+        aggregateMemberCount: 1,
+        isManager: true,
+      );
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => DashboardNotifier.forTesting()),
+            ChangeNotifierProvider.value(value: teamNotifier),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: TeamRadarTab()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('My Team'), findsOneWidget);
+      expect(find.text('My Org'), findsOneWidget);
+    });
+
+    testWidgets('hides scope toggle for non-managers', (tester) async {
+      final teamNotifier = TeamNotifier.forTesting(
+        profile: TeamProfile(
+          members: [IndividualProfile(name: 'Alice', scores: [3, 3, 3, 3, 3])],
+        ),
+        aggregateCoverageDomains: defaultDashboardData.applicationDomains
+            .map(
+              (d) => ApplicationDomain(
+                id: d.id,
+                name: d.name,
+                shortName: d.shortName,
+                applicability: DomainApplicability.inScope,
+                involvement: DomainInvolvement.regular,
+                value: DomainSignal.moderate,
+                confidence: DomainSignal.moderate,
+                capabilityIds: const [],
+              ),
+            )
+            .toList(),
+        aggregateMemberCount: 1,
+        isManager: false,
+      );
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => DashboardNotifier.forTesting()),
+            ChangeNotifierProvider.value(value: teamNotifier),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: TeamRadarTab()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('My Team'), findsNothing);
+      expect(find.text('My Org'), findsNothing);
+    });
+
+    testWidgets('shows self-inclusion toggle and org data in org scope', (tester) async {
+      final teamNotifier = TeamNotifier.forTesting(
+        profile: TeamProfile(
+          members: [IndividualProfile(name: 'Alice', scores: [3, 3, 3, 3, 3])],
+        ),
+        aggregateCoverageDomains: defaultDashboardData.applicationDomains
+            .map(
+              (d) => ApplicationDomain(
+                id: d.id,
+                name: d.name,
+                shortName: d.shortName,
+                applicability: DomainApplicability.inScope,
+                involvement: DomainInvolvement.regular,
+                value: DomainSignal.moderate,
+                confidence: DomainSignal.moderate,
+                capabilityIds: const [],
+              ),
+            )
+            .toList(),
+        aggregateMemberCount: 1,
+        isManager: true,
+        orgProfile: TeamProfile(
+          members: [
+            IndividualProfile(name: 'Carol', scores: [5, 5, 5, 5, 5]),
+            IndividualProfile(name: 'Dave', scores: [1, 1, 1, 1, 1]),
+          ],
+        ),
+        orgAggregateCoverageDomains: defaultDashboardData.applicationDomains
+            .map(
+              (d) => ApplicationDomain(
+                id: d.id,
+                name: d.name,
+                shortName: d.shortName,
+                applicability: DomainApplicability.inScope,
+                involvement: DomainInvolvement.occasional,
+                value: DomainSignal.moderate,
+                confidence: DomainSignal.moderate,
+                capabilityIds: const [],
+              ),
+            )
+            .toList(),
+        orgAggregateMemberCount: 2,
+      );
+      teamNotifier.setOrgScope(TeamScope.org);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => DashboardNotifier.forTesting()),
+            ChangeNotifierProvider.value(value: teamNotifier),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: TeamRadarTab()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Include my own submission'), findsOneWidget);
+      expect(find.text('Org Radar — 2 members'), findsOneWidget);
+      expect(find.widgetWithText(InkWell, 'Carol'), findsOneWidget);
+      expect(find.widgetWithText(InkWell, 'Dave'), findsOneWidget);
+      expect(find.widgetWithText(InkWell, 'Alice'), findsNothing);
     });
   });
 }
