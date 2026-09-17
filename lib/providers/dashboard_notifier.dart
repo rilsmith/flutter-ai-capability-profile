@@ -12,6 +12,7 @@ import '../models/dashboard_data.dart';
 import '../utils/api_origin.dart';
 import '../utils/application.dart';
 import '../utils/application_sync.dart';
+import '../utils/impersonation.dart';
 import '../models/dimension.dart';
 import '../utils/json_export_web.dart'
     if (dart.library.io) '../utils/json_export_stub.dart';
@@ -388,14 +389,16 @@ class DashboardNotifier extends ChangeNotifier {
 
     try {
       final origin = apiOrigin();
+      final headers = {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+      Impersonation.apply(headers);
       final response = await _httpClient
           .post(
             Uri.parse('$origin/api/submissions'),
-            headers: {
-              'Authorization': 'Bearer $token',
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
+            headers: headers,
             body: jsonEncode(_data.toJson()),
           )
           .timeout(const Duration(seconds: 15));
@@ -460,13 +463,15 @@ class DashboardNotifier extends ChangeNotifier {
 
     try {
       final origin = apiOrigin();
+      final headers = {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      };
+      Impersonation.apply(headers);
       final response = await _httpClient
           .get(
             Uri.parse('$origin/api/submissions/me'),
-            headers: {
-              'Authorization': 'Bearer $token',
-              'Accept': 'application/json',
-            },
+            headers: headers,
           )
           .timeout(const Duration(seconds: 15));
 

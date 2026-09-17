@@ -17,3 +17,10 @@ CREATE TABLE IF NOT EXISTS submissions (
 CREATE INDEX IF NOT EXISTS idx_submissions_user_uid ON submissions(user_uid);
 CREATE INDEX IF NOT EXISTS idx_submissions_manager_uid ON submissions(manager_uid);
 CREATE INDEX IF NOT EXISTS idx_submissions_submitted_at ON submissions(submitted_at);
+
+-- Composite indexes for the latest-per-user queries: DISTINCT ON (user_uid)
+-- with ORDER BY submitted_at DESC, scoped by user or manager.
+CREATE INDEX IF NOT EXISTS idx_submissions_user_submitted
+    ON submissions(user_uid, submitted_at DESC);
+CREATE INDEX IF NOT EXISTS idx_submissions_manager_user_submitted
+    ON submissions(manager_uid, user_uid, submitted_at DESC);

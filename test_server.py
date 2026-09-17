@@ -1359,3 +1359,245 @@ def test_validate_env_reports_missing_required_variable(monkeypatch, var_name):
 def test_validate_env_returns_empty_when_all_required_variables_present():
     assert server_module._validate_env() == []
 
+
+
+# ── Impersonation (X-Act-As-Uid) ─────────────────────────────────────────────
+
+
+def _allow_impersonation(monkeypatch, uids=("rilsmith",)):
+    monkeypatch.setattr(
+        server_module, "IMPERSONATION_ALLOWED_UIDS", set(uids)
+    )
+
+
+def test_get_identity_swaps_for_allowed_caller(monkeypatch):
+    _allow_impersonation(monkeypatch)
+    monkeypatch.setattr(
+        server_module,
+        "_derive_identity",
+        lambda token: _auth_identity(uid="rilsmith"),
+    )
+    monkeypatch.setattr(
+        server_module,
+        "_ldap_lookup",
+        lambda uid: {
+            "found": True,
+            "uid": uid,
+            "displayName": "Tony G",
+            "mail": f"{uid}@example.com",
+            "manager": "",
+            "departmentNumber": "",
+        },
+    )
+    with server_module.app.test_request_context(
+        "/",
+        headers={"Authorization": "Bearer t", "X-Act-As-Uid": "tonyg"},
+    ):
+        identity = server_module._get_identity()
+    assert identity["uid"] == "tonyg"
+    assert identity["acting_as"] is True
+    assert identity["real_uid"] == "rilsmith"
+    assert identity["name"] == "Tony G"
+
+
+def test_get_identity_ignores_header_for_non_allowed_caller(monkeypatch):
+    _allow_impersonation(monkeypatch, uids=("someoneelse",))
+    monkeypatch.setattr(
+        server_module,
+        "_derive_identity",
+        lambda token: _auth_identity(uid="rilsmith"),
+    )
+    with server_module.app.test_request_context(
+        "/",
+        headers={"Authorization": "Bearer t", "X-Act-As-Uid": "tonyg"},
+    ):
+        identity = server_module._get_identity()
+    assert identity["uid"] == "rilsmith"
+    assert identity["acting_as"] is False
+
+
+def test_get_identity_falls_back_when_target_missing(monkeypatch):
+    _allow_impersonation(monkeypatch)
+    monkeypatch.setattr(
+        server_module,
+        "_derive_identity",
+        lambda token: _auth_identity(uid="rilsmith"),
+    )
+    monkeypatch.setattr(
+        server_module,
+        "_ldap_lookup",
+        lambda uid: {"found": False, "uid": uid},
+    )
+    with server_module.app.test_request_context(
+        "/",
+        headers={"Authorization": "Bearer t", "X-Act-As-Uid": "ghost"},
+    ):
+        identity = server_module._get_identity()
+    assert identity["uid"] == "rilsmith"
+    assert identity["acting_as"] is False
+
+
+def test_submission_blocked_while_impersonating(client, monkeypatch):
+    _allow_impersonation(monkeypatch)
+    identity = _auth_identity(uid="tonyg", name="Tony G")
+    identity["real_uid"] = "rilsmith"
+    identity["acting_as"] = True
+    monkeypatch.setattr(server_module, "_get_identity", lambda: identity)
+    resp = client.post(
+        "/api/submissions",
+        json=_sample_payload(),
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 403
+    assert "impersonating" in resp.json["error"]
+
+
+def test_ldap_search_requires_allowlisted_caller(client, monkeypatch):
+    _set_identity(monkeypatch, uid="jbellows")
+    resp = client.get(
+        "/api/ldap/search?q=to",
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 403
+
+
+def test_ldap_search_short_query_returns_empty(client, monkeypatch):
+    _allow_impersonation(monkeypatch)
+    _set_identity(monkeypatch, uid="rilsmith")
+    resp = client.get(
+        "/api/ldap/search?q=t",
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 200
+    assert resp.json == {"results": []}
+
+
+def test_ldap_search_returns_matches(client, monkeypatch):
+    _allow_impersonation(monkeypatch)
+    _set_identity(monkeypatch, uid="rilsmith")
+
+    class _FakeEntry:
+        def __init__(self, attrs):
+            self.entry_attributes_as_dict = attrs
+
+    class _FakeLdapConn:
+        entries = [
+            _FakeEntry(
+                {
+                    "uid": ["tonyg"],
+                    "displayName": ["Tony G"],
+                    "mail": ["tonyg@example.com"],
+                }
+            ),
+            _FakeEntry({"uid": ["yxing"], "displayName": [""], "mail": [""]}),
+        ]
+
+        def search(self, *args, **kwargs):
+            pass
+
+        def unbind(self):
+            pass
+
+    monkeypatch.setattr(
+        server_module, "_ldap_connection", lambda: _FakeLdapConn()
+    )
+    resp = client.get(
+        "/api/ldap/search?q=to",
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 200
+    results = resp.json["results"]
+    assert [r["uid"] for r in results] == ["tonyg", "yxing"]
+    assert results[0]["displayName"] == "Tony G"
+
+
+def test_ldap_api_reports_can_impersonate(client, monkeypatch):
+    _allow_impersonation(monkeypatch)
+    monkeypatch.setattr(
+        server_module,
+        "_derive_identity",
+        lambda token: _auth_identity(uid="rilsmith"),
+    )
+    monkeypatch.setattr(
+        server_module,
+        "_ldap_lookup",
+        lambda uid: {
+            "found": True,
+            "uid": uid,
+            "displayName": "",
+            "mail": "",
+            "manager": "",
+            "departmentNumber": "",
+        },
+    )
+    resp = client.get(
+        "/api/ldap?uid=tonyg",
+        headers={"Authorization": "Bearer valid_token"},
+    )
+    assert resp.status_code == 200
+    assert resp.json["can_impersonate"] is True
+
+
+def test_ldap_api_reports_false_without_token(client, monkeypatch):
+    _allow_impersonation(monkeypatch)
+    monkeypatch.setattr(
+        server_module,
+        "_ldap_lookup",
+        lambda uid: {
+            "found": True,
+            "uid": uid,
+            "displayName": "",
+            "mail": "",
+            "manager": "",
+            "departmentNumber": "",
+        },
+    )
+    resp = client.get("/api/ldap?uid=tonyg")
+    assert resp.status_code == 200
+    assert resp.json["can_impersonate"] is False
+
+
+# ── Org tree walk (level-wise LDAP search) ───────────────────────────────────
+
+
+class _FakeLdapEntry:
+    def __init__(self, attrs):
+        self.entry_attributes_as_dict = attrs
+
+
+def test_get_org_tree_uids_uses_one_search_per_level(monkeypatch):
+    server_module._org_tree_cache.clear()
+    searches: list[str] = []
+
+    class _FakeTreeConn:
+        def search(self, base_dn, search_filter, **kwargs):
+            searches.append(search_filter)
+            if "cn=jbellows" in search_filter:
+                # Level 1: jbellows manages a and b.
+                self.entries = [
+                    _FakeLdapEntry({"uid": ["a"]}),
+                    _FakeLdapEntry({"uid": ["b"]}),
+                ]
+            elif "(manager=cn=a)" in search_filter:
+                # Level 2: a manages c; b manages nobody.
+                self.entries = [_FakeLdapEntry({"uid": ["c"]})]
+            else:
+                self.entries = []
+
+        def unbind(self):
+            pass
+
+    monkeypatch.setattr(server_module, "_ldap_connection", lambda: _FakeTreeConn())
+
+    uids = server_module._get_org_tree_uids("jbellows")
+
+    assert uids == {"a", "b", "c"}
+    # One search per level (jbellows -> a,b -> c -> no reports), never one
+    # per manager.
+    assert len(searches) == 3
+
+    # Cached repeat walk performs no searches.
+    searches.clear()
+    assert server_module._get_org_tree_uids("jbellows") == {"a", "b", "c"}
+    assert searches == []
+    server_module._org_tree_cache.clear()

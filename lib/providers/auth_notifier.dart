@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../utils/api_origin.dart';
+import '../utils/impersonation.dart';
 import '../utils/url_utils_stub.dart'
     if (dart.library.js_interop) '../utils/url_utils_web.dart';
 
@@ -52,6 +53,8 @@ class AuthNotifier extends ChangeNotifier {
   bool _loading = true;
   String? _error;
   String? _token;
+  bool _canImpersonate = false;
+  bool _impersonationPending = false;
 
   GitHubUser? get user => _user;
   LdapInfo? get ldapInfo => _ldapInfo;
@@ -60,6 +63,20 @@ class AuthNotifier extends ChangeNotifier {
   String? get error => _error;
   String? get token => _token;
   bool get isOAuthConfigured => _clientId.isNotEmpty && _redirectUri.isNotEmpty;
+
+  /// Whether the backend allows this user to view the app as another LDAP
+  /// user (test-only impersonation, backed by IMPERSONATION_ALLOWED_UIDS).
+  bool get canImpersonate => _canImpersonate;
+
+  /// True when the user is logged in but still needs to confirm whose data
+  /// to view (only ever true for impersonation-allowed users).
+  bool get impersonationPending => _impersonationPending;
+
+  /// Dismiss the post-login impersonation picker and enter the app.
+  void confirmImpersonation() {
+    _impersonationPending = false;
+    notifyListeners();
+  }
 
   /// Select the primary email from GitHub's /user/emails response.
   ///
@@ -114,11 +131,15 @@ class AuthNotifier extends ChangeNotifier {
     String? token,
     bool loading = false,
     String? error,
+    bool canImpersonate = false,
+    bool impersonationPending = false,
   })  : _user = user,
         _ldapInfo = ldapInfo,
         _token = token,
         _loading = loading,
-        _error = error;
+        _error = error,
+        _canImpersonate = canImpersonate,
+        _impersonationPending = impersonationPending;
 
   Future<void> _init() async {
     // On web, check if the server redirected us back with a token in the URL.
@@ -262,7 +283,12 @@ class AuthNotifier extends ChangeNotifier {
       final origin = apiOrigin();
       final uri = Uri.parse(
           '$origin/api/ldap?uid=${Uri.encodeComponent(uid)}');
-      final resp = await http.get(uri);
+      final headers = <String, String>{
+        // The public LDAP proxy accepts an optional token and reports
+        // whether this caller may use test-only impersonation.
+        if (_token != null) 'Authorization': 'Bearer $_token',
+      };
+      final resp = await http.get(uri, headers: headers);
       if (resp.statusCode != 200) return;
       final data = jsonDecode(resp.body) as Map<String, dynamic>;
       if (data['found'] != true) return;
@@ -272,6 +298,11 @@ class AuthNotifier extends ChangeNotifier {
         manager: data['manager'] as String? ?? '',
         departmentNumber: data['departmentNumber'] as String? ?? '',
       );
+      if (data['can_impersonate'] == true) {
+        _canImpersonate = true;
+        // Impersonators choose whose data to view before entering the app.
+        _impersonationPending = true;
+      }
     } catch (_) {
       // LDAP lookup is best-effort; don't break login if it fails.
     }
@@ -288,6 +319,9 @@ class AuthNotifier extends ChangeNotifier {
   Future<void> logout() async {
     await _clearSession();
     _error = null;
+    _canImpersonate = false;
+    _impersonationPending = false;
+    Impersonation.setUid(null);
     notifyListeners();
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -298,6 +299,41 @@ void main() {
       expect(notifier.error, isNotNull);
       expect(notifier.error, contains('500'));
       expect(notifier.loading, isFalse);
+    });
+
+    test('marks org data as loading while the team fetch is still pending', () async {
+      final teamCompleter = Completer<http.Response>();
+      final mockClient = MockClient((request) async {
+        if (request.url.path == '/api/submissions/team') {
+          return teamCompleter.future;
+        }
+        if (request.url.path == '/api/submissions/org') {
+          return http.Response(jsonEncode({'submissions': []}), 200);
+        }
+        if (request.url.path == '/api/submissions/org/aggregate') {
+          return http.Response(
+            jsonEncode({'member_count': 0, 'dimensions': [], 'domains': []}),
+            200,
+          );
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final notifier = TeamNotifier(httpClient: mockClient);
+      final pending = notifier.fetchTeamData('test-token');
+
+      // The user can switch to the My Org view before any data arrives; the
+      // notifier must report loading so the UI shows a spinner, not the
+      // "no submissions" empty state.
+      expect(notifier.orgLoading, isTrue);
+
+      teamCompleter.complete(http.Response(jsonEncode({'submissions': []}), 200));
+      await pending;
+
+      // The background org fetch resolves cleanly on a forced retry.
+      await notifier.fetchOrgData('test-token', force: true);
+      expect(notifier.orgLoading, isFalse);
+      expect(notifier.orgError, isNull);
     });
   });
 
@@ -649,7 +685,7 @@ void main() {
       expect(find.text('Alice — Individual View'), findsOneWidget);
     });
 
-    testWidgets('shows scope toggle for managers', (tester) async {
+    testWidgets('shows scope toggle with scope subtitles for managers', (tester) async {
       final teamNotifier = TeamNotifier.forTesting(
         profile: TeamProfile(
           members: [IndividualProfile(name: 'Alice', scores: [3, 3, 3, 3, 3])],
@@ -687,9 +723,11 @@ void main() {
 
       expect(find.text('My Team'), findsOneWidget);
       expect(find.text('My Org'), findsOneWidget);
+      expect(find.text('Me and my peers'), findsOneWidget);
+      expect(find.text('Me and my reports (direct + indirect)'), findsOneWidget);
     });
 
-    testWidgets('hides scope toggle for non-managers', (tester) async {
+    testWidgets('shows scope toggle for non-managers too', (tester) async {
       final teamNotifier = TeamNotifier.forTesting(
         profile: TeamProfile(
           members: [IndividualProfile(name: 'Alice', scores: [3, 3, 3, 3, 3])],
@@ -725,8 +763,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('My Team'), findsNothing);
-      expect(find.text('My Org'), findsNothing);
+      expect(find.text('My Team'), findsOneWidget);
+      expect(find.text('My Org'), findsOneWidget);
     });
 
     testWidgets('shows self-inclusion toggle and org data in org scope', (tester) async {

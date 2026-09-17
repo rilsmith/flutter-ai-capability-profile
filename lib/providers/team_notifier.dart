@@ -10,6 +10,7 @@ import '../models/dimension.dart';
 import '../models/individual_profile.dart';
 import '../models/team_profile.dart';
 import '../utils/api_origin.dart';
+import '../utils/impersonation.dart';
 
 enum TeamScope { team, org }
 
@@ -306,14 +307,28 @@ class TeamNotifier extends ChangeNotifier {
         'Accept': 'application/json',
       };
       final includeSelf = _orgIncludeSelf ? 'true' : 'false';
-      final orgResp = await _httpClient
-          .get(
-            Uri.parse(
-              '$origin/api/submissions/org?include_self=$includeSelf',
-            ),
-            headers: headers,
-          )
-          .timeout(const Duration(seconds: 15));
+      Impersonation.apply(headers);
+      // Fire both requests in parallel; they are independent and each takes
+      // a moment (the backend resolves the org tree per request).
+      final responses = await Future.wait<http.Response>([
+        _httpClient
+            .get(
+              Uri.parse(
+                '$origin/api/submissions/org?include_self=$includeSelf',
+              ),
+              headers: headers,
+            )
+            .timeout(const Duration(seconds: 15)),
+        _httpClient
+            .get(
+              Uri.parse(
+                '$origin/api/submissions/org/aggregate?include_self=$includeSelf',
+              ),
+              headers: headers,
+            )
+            .timeout(const Duration(seconds: 15)),
+      ]);
+      final orgResp = responses[0];
       if (orgResp.statusCode != 200) {
         throw Exception(
           'Failed to load org submissions (${orgResp.statusCode})',
@@ -322,14 +337,7 @@ class TeamNotifier extends ChangeNotifier {
       final orgData = jsonDecode(orgResp.body) as Map<String, dynamic>;
       final submissions = (orgData['submissions'] as List<dynamic>)
           .cast<Map<String, dynamic>>();
-      final aggResp = await _httpClient
-          .get(
-            Uri.parse(
-              '$origin/api/submissions/org/aggregate?include_self=$includeSelf',
-            ),
-            headers: headers,
-          )
-          .timeout(const Duration(seconds: 15));
+      final aggResp = responses[1];
       if (aggResp.statusCode != 200) {
         throw Exception(
           'Failed to load org aggregate (${aggResp.statusCode})',
@@ -419,6 +427,11 @@ class TeamNotifier extends ChangeNotifier {
     _loading = true;
     _error = null;
     _warnings = [];
+    // Org data loads right after team data; mark it pending up front so a
+    // user who switches to the My Org view sees a spinner instead of the
+    // "no submissions" empty state while the fetch chain is still running.
+    _orgLoading = true;
+    _hasAttemptedOrgFetch = false;
     notifyListeners();
 
     try {
@@ -427,6 +440,7 @@ class TeamNotifier extends ChangeNotifier {
         'Authorization': 'Bearer $token',
         'Accept': 'application/json',
       };
+      Impersonation.apply(headers);
       final teamResp = await _httpClient
           .get(Uri.parse('$origin/api/submissions/team'), headers: headers)
           .timeout(const Duration(seconds: 15));
@@ -520,6 +534,9 @@ class TeamNotifier extends ChangeNotifier {
     } catch (e) {
       _error = e.toString();
       _loading = false;
+      // Org data never starts when the team fetch fails; don't leave the
+      // org view stuck on its spinner.
+      _orgLoading = false;
       notifyListeners();
     }
   }

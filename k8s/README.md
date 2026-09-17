@@ -42,6 +42,22 @@ Before applying the manifests, replace the placeholder values in:
   regenerate the TLS secret if a different hostname or a cluster-provisioned
   certificate is required.
 
+## Test impersonation
+
+For testing, the API can serve data as another LDAP user. Set the
+`IMPERSONATION_ALLOWED_UIDS` deployment environment variable to a
+comma-separated list of UIDs (empty disables the feature):
+
+```bash
+kubectl set env deployment/api IMPERSONATION_ALLOWED_UIDS=rilsmith,jbellows \
+  -n ns-team-ads-test --context ethos270-stage-va7
+```
+
+Allowed users get a "View data as" picker on the login screen (backed by
+`/api/submissions`-independent `/api/ldap/search`); their token still proves
+who they are, and the backend swaps the identity via the `X-Act-As-Uid`
+header. Submissions are rejected (403) while impersonating.
+
 ## Postgres data directory
 
 The Postgres deployment sets `PGDATA` to `/var/lib/postgresql/data/pgdata`

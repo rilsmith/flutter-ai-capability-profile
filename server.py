@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import sys
+import time
 import urllib.parse
 import urllib.request
 from typing import Any
@@ -51,6 +52,13 @@ LDAP_BASE_DN = os.environ.get("LDAP_BASE_DN")
 # anonymous bind (local dev / tests).
 LDAP_BIND_DN = os.environ.get("LDAP_BIND_DN")
 LDAP_PASSWORD = os.environ.get("LDAP_PASSWORD")
+# Test-only impersonation: comma-separated UIDs allowed to view the app as
+# another LDAP user via the X-Act-As-Uid header. Empty disables the feature.
+IMPERSONATION_ALLOWED_UIDS = {
+    uid.strip()
+    for uid in os.environ.get("IMPERSONATION_ALLOWED_UIDS", "").split(",")
+    if uid.strip()
+}
 DATABASE_URL = os.environ.get("DATABASE_URL")
 CORS_ORIGIN = os.environ.get("CORS_ORIGIN")
 WEB_DIR = os.environ.get("WEB_DIR", "build/web")
@@ -102,7 +110,9 @@ def _add_cors_headers(response: Any) -> Any:
     """Attach CORS headers to every response."""
     response.headers["Access-Control-Allow-Origin"] = CORS_ORIGIN
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
+    response.headers["Access-Control-Allow-Headers"] = (
+        "Authorization, Content-Type, X-Act-As-Uid"
+    )
     return response
 
 
@@ -273,11 +283,45 @@ def _extract_bearer_token() -> str:
 
 
 def _get_identity() -> dict:
-    """Return the authenticated GitHub identity, validating once per request."""
+    """Return the authenticated GitHub identity, validating once per request.
+
+    Test-only impersonation: when the caller is listed in
+    IMPERSONATION_ALLOWED_UIDS and sends an X-Act-As-Uid header, the identity
+    is swapped for the target LDAP user so the app can be viewed as if the
+    caller were that person. The real uid is preserved under "real_uid".
+    """
     if "identity" in g:
         return g.identity
     token = _extract_bearer_token()
-    g.identity = _derive_identity(token)
+    identity = _derive_identity(token)
+    identity["real_uid"] = identity["uid"]
+    identity["acting_as"] = False
+
+    act_as = request.headers.get("X-Act-As-Uid", "").strip()
+    if (
+        act_as
+        and act_as != identity["uid"]
+        and identity["uid"] in IMPERSONATION_ALLOWED_UIDS
+    ):
+        try:
+            target = _ldap_lookup(act_as)
+        except Exception:
+            logger.exception("Impersonation LDAP lookup failed for %s", act_as)
+            target = {"found": False, "uid": act_as}
+        if target.get("found"):
+            identity = {
+                **identity,
+                "uid": act_as,
+                "name": target.get("displayName") or act_as,
+                "email": target.get("mail") or f"{act_as}@adobe.com",
+                "acting_as": True,
+            }
+        else:
+            logger.warning(
+                "Impersonation target %s not found; using real identity", act_as
+            )
+
+    g.identity = identity
     return g.identity
 
 
@@ -343,18 +387,25 @@ def auth_callback() -> Any:
 
 # ── LDAP proxy ───────────────────────────────────────────────────────────────
 
-def _ldap_lookup(uid: str) -> dict:
-    """Look up a user in the configured LDAP directory."""
+def _ldap_connection() -> Any:
+    """Open an LDAP connection.
+
+    The directory hides the "manager" attribute from anonymous readers, so
+    bind with the configured service account when credentials exist.
+    Without credentials, fall back to an anonymous bind.
+    """
     server = Server(LDAP_URL)
-    # The directory hides the "manager" attribute from anonymous readers,
-    # so bind with the configured service account when credentials exist.
-    # Without credentials, fall back to an anonymous bind.
     bind_kwargs = (
         {"user": LDAP_BIND_DN, "password": LDAP_PASSWORD}
         if LDAP_BIND_DN and LDAP_PASSWORD
         else {"authentication": ANONYMOUS}
     )
-    conn = Connection(server, auto_bind=True, **bind_kwargs)
+    return Connection(server, auto_bind=True, **bind_kwargs)
+
+
+def _ldap_lookup(uid: str) -> dict:
+    """Look up a user in the configured LDAP directory."""
+    conn = _ldap_connection()
     try:
         conn.search(
             LDAP_BASE_DN,
@@ -395,10 +446,71 @@ def ldap_api() -> Any:
         return jsonify({"error": "uid parameter required"}), 400
 
     try:
-        return jsonify(_ldap_lookup(uid))
+        result = _ldap_lookup(uid)
+        # Optional auth: when a valid Bearer token accompanies the lookup
+        # (the Flutter app sends one during login), report whether the caller
+        # may use impersonation so the login screen can show the picker.
+        can_impersonate = False
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            try:
+                caller = _derive_identity(auth_header[7:].strip())
+                can_impersonate = (
+                    caller.get("real_uid", caller["uid"])
+                    in IMPERSONATION_ALLOWED_UIDS
+                )
+            except Exception:
+                can_impersonate = False
+        result["can_impersonate"] = can_impersonate
+        return jsonify(result)
     except Exception as exc:
         logger.exception("LDAP lookup failed")
         return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/ldap/search", methods=["GET", "OPTIONS"])
+def ldap_search_api() -> Any:
+    """LDAP user search backing the impersonation picker.
+
+    Restricted to the UIDs listed in IMPERSONATION_ALLOWED_UIDS.
+    """
+    if request.method == "OPTIONS":
+        return "", 204
+
+    identity = _get_identity()
+    if identity.get("real_uid", identity["uid"]) not in IMPERSONATION_ALLOWED_UIDS:
+        return jsonify({"error": "Not allowed"}), 403
+
+    query = request.args.get("q", "").strip()
+    if len(query) < 2:
+        return jsonify({"results": []})
+
+    escaped = _escape_ldap_filter_value(query)
+    conn = _ldap_connection()
+    try:
+        conn.search(
+            LDAP_BASE_DN,
+            f"(|(uid=*{escaped}*)(displayName=*{escaped}*))",
+            search_scope=SUBTREE,
+            attributes=["uid", "displayName", "mail"],
+        )
+        results = []
+        for entry in conn.entries:
+            attrs = entry.entry_attributes_as_dict
+            entry_uid = attrs.get("uid")
+            if not entry_uid:
+                continue
+            results.append(
+                {
+                    "uid": str(entry_uid[0]),
+                    "displayName": str((attrs.get("displayName") or [""])[0]),
+                    "mail": str((attrs.get("mail") or [""])[0]),
+                }
+            )
+        results.sort(key=lambda r: r["uid"])
+        return jsonify({"results": results[:25]})
+    finally:
+        conn.unbind()
 
 
 # ── Org tree helpers ─────────────────────────────────────────────────────────
@@ -429,8 +541,7 @@ def _get_direct_reports_uids(uid: str) -> list[str]:
     beginning with `cn={uid},...`. Search for both forms to find all direct
     reports.
     """
-    server = Server(LDAP_URL)
-    conn = Connection(server, authentication=ANONYMOUS, auto_bind=True)
+    conn = _ldap_connection()
     try:
         escaped_uid = _escape_ldap_filter_value(uid)
         conn.search(
@@ -450,24 +561,70 @@ def _get_direct_reports_uids(uid: str) -> list[str]:
         conn.unbind()
 
 
+def _direct_reports_filter(uids: list[str]) -> str:
+    """Build an LDAP filter matching anyone managed by any of [uids].
+
+    The manager attribute is stored as either the RDN `cn={uid}` or a DN
+    beginning with `cn={uid},...`; search for both forms.
+    """
+    clauses = []
+    for uid in uids:
+        escaped = _escape_ldap_filter_value(uid)
+        clauses.append(f"(manager=cn={escaped})")
+        clauses.append(f"(manager=cn={escaped},*)")
+    return "(|" + "".join(clauses) + ")"
+
+
+# Org-tree walks are LDAP-heavy and org structure changes rarely, so results
+# are cached briefly per root uid. The two org endpoints (raw + aggregate)
+# fire back-to-back on every dashboard load and share one walk via this cache.
+_ORG_TREE_CACHE_TTL_SECONDS = 300
+_org_tree_cache: dict[str, tuple[float, frozenset[str]]] = {}
+
+
 def _get_org_tree_uids(root_uid: str, max_depth: int = _ORG_TREE_MAX_DEPTH) -> set[str]:
-    """Return all UIDs under root_uid in the LDAP manager tree (excluding root)."""
-    visited: set[str] = set()
+    """Return all UIDs under root_uid in the LDAP manager tree (excluding root).
+
+    Walks the tree level by level using a single LDAP connection and one
+    search per level (an OR filter over every manager on the frontier), so a
+    depth-N tree costs at most N searches instead of one per manager.
+    """
+    cached = _org_tree_cache.get(root_uid)
+    if cached is not None and time.monotonic() - cached[0] < _ORG_TREE_CACHE_TTL_SECONDS:
+        return set(cached[1])
+
+    visited: set[str] = {root_uid}
+    collected: set[str] = set()
     frontier = [root_uid]
     depth = 0
-    while frontier and depth < max_depth:
-        next_frontier: list[str] = []
-        for manager_uid in frontier:
-            if manager_uid in visited:
-                continue
-            visited.add(manager_uid)
-            for report_uid in _get_direct_reports_uids(manager_uid):
-                if report_uid not in visited:
-                    next_frontier.append(report_uid)
-        frontier = next_frontier
-        depth += 1
-    visited.discard(root_uid)
-    return visited
+
+    conn = _ldap_connection()
+    try:
+        while frontier and depth < max_depth:
+            conn.search(
+                LDAP_BASE_DN,
+                _direct_reports_filter(frontier),
+                search_scope=SUBTREE,
+                attributes=["uid"],
+            )
+            next_frontier: list[str] = []
+            for entry in conn.entries:
+                attrs = entry.entry_attributes_as_dict
+                entry_uid = attrs.get("uid")
+                if not entry_uid:
+                    continue
+                uid = str(entry_uid[0])
+                if uid not in visited:
+                    visited.add(uid)
+                    collected.add(uid)
+                    next_frontier.append(uid)
+            frontier = next_frontier
+            depth += 1
+    finally:
+        conn.unbind()
+
+    _org_tree_cache[root_uid] = (time.monotonic(), frozenset(collected))
+    return collected
 
 
 # ── Submission helpers ───────────────────────────────────────────────────────
@@ -833,6 +990,10 @@ def create_submission() -> Any:
         return "", 204
 
     identity = _get_identity()
+    if identity.get("acting_as"):
+        return jsonify(
+            {"error": "Cannot submit while impersonating another user"}
+        ), 403
     manager = _get_manager(identity["uid"])
     payload = _json_payload()
     _validate_dashboard_payload(payload)
@@ -883,6 +1044,9 @@ def get_my_submission() -> Any:
         return "", 204
 
     identity = _get_identity()
+    can_impersonate = (
+        identity.get("real_uid", identity["uid"]) in IMPERSONATION_ALLOWED_UIDS
+    )
 
     conn = _get_db_conn()
     try:
@@ -905,7 +1069,9 @@ def get_my_submission() -> Any:
     if row is None:
         raise NotFoundError("No submission found")
 
-    return jsonify(_row_to_submission(row))
+    data = _row_to_submission(row)
+    data["can_impersonate"] = can_impersonate
+    return jsonify(data)
 
 
 @app.route("/api/submissions/team", methods=["GET", "OPTIONS"])

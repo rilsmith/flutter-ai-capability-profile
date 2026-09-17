@@ -39,7 +39,10 @@ class _AuthGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthNotifier>();
-    if (auth.isLoggedIn) return const _HomePage();
+    // Impersonation-allowed users pick whose data to view before entering.
+    if (auth.isLoggedIn && !auth.impersonationPending) {
+      return const _HomePage();
+    }
     return const LoginScreen();
   }
 }

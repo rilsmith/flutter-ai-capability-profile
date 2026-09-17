@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/auth_notifier.dart';
 import '../theme/dashboard_theme.dart';
+import '../utils/impersonation.dart';
 
 /// Header user menu showing avatar, name, LDAP-derived manager/department,
 /// and a Sign out option. Replaces the previous inline user bar.
@@ -63,13 +64,26 @@ class UserMenu extends StatelessWidget {
               child: Text(
                 displayName,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: DashboardTheme.body,
+                  color: Impersonation.active
+                      ? DashboardTheme.primary
+                      : DashboardTheme.body,
                 ),
               ),
             ),
+            if (Impersonation.active) ...[
+              const SizedBox(width: 4),
+              Text(
+                'as ${Impersonation.uid}',
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: DashboardTheme.primary,
+                ),
+              ),
+            ],
             const SizedBox(width: 4),
             const Icon(
               Icons.arrow_drop_down,

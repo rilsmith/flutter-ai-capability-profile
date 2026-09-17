@@ -101,10 +101,8 @@ class _TeamRadarTabState extends State<TeamRadarTab>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (teamNotifier.isManager) ...[
-            _buildScopeToggle(context, teamNotifier),
-            const SizedBox(height: 16),
-          ],
+          _buildScopeToggle(context, teamNotifier),
+          const SizedBox(height: 16),
           if (isOrg) ...[
             _buildIncludeSelfToggle(context, teamNotifier),
             const SizedBox(height: 16),
@@ -137,7 +135,23 @@ class _TeamRadarTabState extends State<TeamRadarTab>
           if (teamNotifier.warnings.isNotEmpty) _buildWarnings(context, teamNotifier),
           if (teamNotifier.warnings.isNotEmpty) const SizedBox(height: 16),
           if (loading)
-            const Center(child: CircularProgressIndicator())
+            Center(
+              child: Column(
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 12),
+                  Text(
+                    isOrg
+                        ? 'Loading your org — walking the reporting tree…'
+                        : 'Loading team data…',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: DashboardTheme.muted,
+                    ),
+                  ),
+                ],
+              ),
+            )
           else if (error != null)
             _buildErrorState(context, teamNotifier, isOrg: isOrg)
           else if (profile.members.isEmpty)
@@ -162,6 +176,7 @@ class _TeamRadarTabState extends State<TeamRadarTab>
           Expanded(
             child: _ScopeButton(
               label: 'My Team',
+              subtitle: 'Me and my peers',
               selected: teamNotifier.orgScope == TeamScope.team,
               onTap: () {
                 setState(() => _selectedMemberIndex = null);
@@ -172,6 +187,7 @@ class _TeamRadarTabState extends State<TeamRadarTab>
           Expanded(
             child: _ScopeButton(
               label: 'My Org',
+              subtitle: 'Me and my reports (direct + indirect)',
               selected: teamNotifier.orgScope == TeamScope.org,
               onTap: () {
                 setState(() => _selectedMemberIndex = null);
@@ -560,11 +576,13 @@ class _TeamRadarTabState extends State<TeamRadarTab>
 class _ScopeButton extends StatelessWidget {
   const _ScopeButton({
     required this.label,
+    required this.subtitle,
     required this.selected,
     required this.onTap,
   });
 
   final String label;
+  final String subtitle;
   final bool selected;
   final VoidCallback onTap;
 
@@ -579,14 +597,27 @@ class _ScopeButton extends StatelessWidget {
           color: selected ? DashboardTheme.primary : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: selected ? Colors.white : DashboardTheme.body,
-          ),
+        child: Column(
+          children: [
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: selected ? Colors.white : DashboardTheme.body,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                color: selected ? Colors.white70 : DashboardTheme.muted,
+              ),
+            ),
+          ],
         ),
       ),
     );
