@@ -5,6 +5,7 @@ import '../models/dimension.dart';
 import '../providers/team_notifier.dart';
 import '../theme/dashboard_theme.dart';
 import 'capability_definition_dialog.dart';
+import 'domain_help_dialog.dart';
 
 /// Read-only aggregate version of the AI × SDLC adoption matrix.
 ///
@@ -270,19 +271,42 @@ class _DomainHeaderRow extends StatelessWidget {
             child: horizontalLabels
                 ? Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 2),
-                    child: Text(
-                      domain.shortName,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        height: 1.15,
-                        color: domain.isNotApplicable
-                            ? DashboardTheme.subtle
-                            : DashboardTheme.body,
-                      ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            domain.shortName,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              height: 1.15,
+                              color: domain.isNotApplicable
+                                  ? DashboardTheme.subtle
+                                  : DashboardTheme.body,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.info_outline,
+                            size: 12,
+                            color: DashboardTheme.subtle,
+                          ),
+                          tooltip: 'What counts as ${domain.shortName}?',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 18,
+                            minHeight: 18,
+                          ),
+                          onPressed: () =>
+                              showDomainHelpDialog(context, domain),
+                        ),
+                      ],
                     ),
                   )
                 : RotatedBox(

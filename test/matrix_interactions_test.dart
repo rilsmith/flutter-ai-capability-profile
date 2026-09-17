@@ -343,6 +343,52 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('1. Prompt Engineering'), findsNothing);
     });
+    testWidgets('domain info icon opens contextual help dialog',
+        (tester) async {
+      final dashboardNotifier = DashboardNotifier.forTesting();
+      final authNotifier = AuthNotifier.forTesting(
+        user: const GitHubUser(
+          login: 'testuser',
+          name: 'Test User',
+          email: 'testuser@example.com',
+          avatarUrl: '',
+        ),
+        token: 'fake-token',
+      );
+      await tester.binding.setSurfaceSize(const Size(1200, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: dashboardNotifier),
+            ChangeNotifierProvider.value(value: authNotifier),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: CapabilityApplicationMatrix(
+                dimensions: dashboardNotifier.data.dimensions,
+                domains: dashboardNotifier.data.applicationDomains,
+                maxScore: dashboardNotifier.data.maxScore,
+                submitEnabled: false,
+                onSubmit: null,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Discovery & Research'), findsNothing);
+      expect(find.text("You're here when you…"), findsNothing);
+      await tester
+          .tap(find.byTooltip('What counts as Discovery?').first);
+      await tester.pumpAndSettle();
+      expect(find.text('Discovery & Research'), findsOneWidget);
+      expect(find.text("You're here when you…"), findsOneWidget);
+      expect(find.text('Common mix-up'), findsOneWidget);
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+      expect(find.text('Discovery & Research'), findsNothing);
+    });
   });
 
   group('SDLCTab matrix', () {
